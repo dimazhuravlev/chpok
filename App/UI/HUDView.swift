@@ -10,10 +10,13 @@ struct HUDView: View {
             Text("Score: \(score)")
                 .font(.title3.weight(.semibold))
                 .monospacedDigit()
+                .foregroundStyle(.white)
                 .accessibilityIdentifier("scoreLabel")
             Spacer()
             Button("Restart") { onRestart() }
                 .buttonStyle(.bordered)
+                .tint(.white)
+                .foregroundStyle(.white)
                 .accessibilityIdentifier("restartButton")
         }
         .padding(.horizontal, 16)

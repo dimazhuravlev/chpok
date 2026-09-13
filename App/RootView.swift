@@ -34,6 +34,7 @@ struct RootView: View {
             }
         }
         .background(Color(Palette.background).ignoresSafeArea())
+        .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { if $0 != .active { vm.persistIfPossible() } }
     }
 }

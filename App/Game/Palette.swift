@@ -15,10 +15,12 @@ enum Palette {
         }
     }
 
-    static let background = UIColor(hex: 0xE9E6F7)
-    static let cannon = UIColor(hex: 0x4A4A6A)
+    static let background = UIColor(hex: 0x000000)
+    static let cannon = UIColor(hex: 0xB8B8C8)
     static let lifeIcon = UIColor(hex: 0x8E8EA8)
-    static let text = UIColor(hex: 0x22223A)
+    static let text = UIColor(hex: 0xFFFFFF)
+    static let overlayCard = UIColor(hex: 0x1C1C1E)
+    static let overlayScrim = UIColor(white: 0, alpha: 0.6)
 }
 
 extension UIColor {

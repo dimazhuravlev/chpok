@@ -8,7 +8,7 @@ struct GameOverOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.45).ignoresSafeArea()
+            Color(Palette.overlayScrim).ignoresSafeArea()
 
             VStack(spacing: 12) {
                 Text(info.title)
@@ -20,10 +20,13 @@ struct GameOverOverlay: View {
                     .accessibilityIdentifier("gameOverTotal")
                 Button("OK") { onOK() }
                     .buttonStyle(.borderedProminent)
+                    .tint(.white)
+                    .foregroundStyle(.black)
                     .accessibilityIdentifier("okButton")
             }
             .padding(24)
-            .background(Color.white)
+            .foregroundStyle(.white)
+            .background(Color(Palette.overlayCard))
             .cornerRadius(16)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("gameOverOverlay")

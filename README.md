@@ -1,6 +1,6 @@
 # Bubble Shooter (iOS)
 
-A native iOS port of the classic bubble-shooter game at [bubbleshooter.com](https://www.bubbleshooter.com/): the original's engine logic (deployed in an iframe from `https://cdn.bubbleshooter.com/games/bubbleshooter-game/`) is ported 1:1 to a deterministic, unit-tested Swift core, driving a SwiftUI + SpriteKit front end.
+A native iOS port of the classic bubble-shooter game at [bubbleshooter.com](https://www.bubbleshooter.com/): the original's engine logic (deployed in an iframe from `https://cdn.bubbleshooter.com/games/bubbleshooter-game/`) is ported 1:1 to a deterministic, unit-tested Swift core, driving a SwiftUI + SpriteKit front end. The site was the starting point only; the game's look and feel now evolve according to the app owner's own requirements rather than mirroring the site.
 
 ## Requirements
 
@@ -48,6 +48,8 @@ See `docs/original-game-logic.md` for the full derivation — every rule, timer,
 - **Loss boundary is measured from the cannon**, not the original's hardcoded `boardCoordY > 14 && pixelY > 470` (a fixed offset from the top of its 800×600 canvas). The port derives the equivalent thresholds from the cannon's own Y position instead, so the loss line scales with the on-screen layout rather than being pixel-fixed — a conscious choice made for the full-screen portrait layout below.
 - **Layout**: portrait only; the board is stretched to fill the screen beneath the HUD header, instead of the original's fixed 800×600 desktop canvas.
 - **Tap = shoot**: chosen deliberately to mirror the original's pointer-down semantics 1:1, even though many touch games fire on release instead.
+- Board uses true hexagonal packing: row height is 32·√3/2 ≈ 27.71 instead of the original's 32, so all six neighbours of a cell are exactly one bubble diameter apart and the rows have no gaps between them.
+- Bubbles are drawn 30 px wide on a 32 px grid with no stroke, leaving an even 2 px gap; the app is rendered on a pure black background.
 
 ## Not ported
 

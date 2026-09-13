@@ -5,8 +5,9 @@ import BubbleShooterCore
 final class BubbleNode: SKShapeNode {
     init(color: BubbleColor) {
         super.init()
-        path = CGPath(ellipseIn: CGRect(x: -16, y: -16, width: 32, height: 32), transform: nil)
-        lineWidth = 1.5
+        path = CGPath(ellipseIn: CGRect(x: -15, y: -15, width: 30, height: 30), transform: nil)
+        lineWidth = 0
+        strokeColor = .clear
         zPosition = 10
         apply(color: color)
     }
@@ -16,19 +17,6 @@ final class BubbleNode: SKShapeNode {
     }
 
     func apply(color: BubbleColor) {
-        let fill = Palette.color(for: color)
-        fillColor = fill
-        strokeColor = fill.darkened(by: 0.25)
-    }
-}
-
-private extension UIColor {
-    /// Returns a copy of the color with each RGB channel scaled down by
-    /// `fraction` (e.g. 0.25 = 25% darker), keeping alpha unchanged.
-    func darkened(by fraction: CGFloat) -> UIColor {
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        getRed(&r, green: &g, blue: &b, alpha: &a)
-        let factor = 1 - fraction
-        return UIColor(red: r * factor, green: g * factor, blue: b * factor, alpha: a)
+        fillColor = Palette.color(for: color)
     }
 }
