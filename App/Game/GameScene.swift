@@ -7,6 +7,7 @@ import BubbleShooterCore
 final class GameScene: SKScene {
     private let engine: GameEngine
     private let geometry: SceneGeometry
+    private let haptics = Haptics()
 
     /// Live bubble nodes keyed by `Bubble.id`.
     private var nodes: [Int: SKNode] = [:]
@@ -71,6 +72,7 @@ final class GameScene: SKScene {
         let corePoint = geometry.corePoint(point)
         if engine.fire(toward: corePoint) {
             updateCannonRotation()
+            haptics.prepareForShot()
         }
     }
 
@@ -158,6 +160,7 @@ final class GameScene: SKScene {
 
     private func handleEvents() {
         for event in engine.drainEvents() {
+            haptics.handle(event)
             switch event {
             case let .removed(id, _, _, _, reason):
                 animateRemoval(id: id, reason: reason)
