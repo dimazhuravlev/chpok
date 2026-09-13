@@ -12,13 +12,17 @@ struct GameOverOverlay: View {
 
             VStack(spacing: 12) {
                 Text(info.title)
-                    .font(.title.bold())
+                    .font(.pretendardSemiBold(28))
                     .accessibilityIdentifier("gameOverTitle")
                 Text("Score: \(info.score)")
+                    .font(.pretendardSemiBold(17))
                 Text("Bonus: \(info.bonus)")
+                    .font(.pretendardSemiBold(17))
                 Text("Total: \(info.total)")
+                    .font(.pretendardSemiBold(17))
                     .accessibilityIdentifier("gameOverTotal")
                 Button("OK") { onOK() }
+                    .font(.pretendardSemiBold(17))
                     .buttonStyle(.borderedProminent)
                     .tint(.white)
                     .foregroundStyle(.black)

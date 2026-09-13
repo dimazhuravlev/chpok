@@ -18,6 +18,7 @@ struct GameOverInfo: Equatable {
 final class GameViewModel: ObservableObject {
     @Published var score = 0
     @Published var livesLeft = 5
+    @Published var maxLives = GameConsts.initialLives
     @Published var gameOver: GameOverInfo?
     /// Exact format `bubbles:<N> score:<S> lives:<L>`, N = `engine.boardBubbles.count`.
     @Published var status: String = "bubbles:0 score:0 lives:5"
@@ -53,7 +54,16 @@ final class GameViewModel: ObservableObject {
     }
 
     /// Creates the engine/scene once a non-zero container size is known.
-    /// Later calls (e.g. from further size changes) are ignored.
+    /// `containerSize` is the scene's own on-screen rectangle — side-inset by
+    /// 10pt and starting right below the header, already reduced by
+    /// `sceneTopInset(areaWidth:)` (see `RootView`) so it matches exactly
+    /// what SpriteKit renders. Later calls (e.g. from further size changes)
+    /// are ignored.
+    ///
+    /// Geometry per the Figma layout (spec 20): the cannon-bubble center
+    /// sits 103pt above the scene's bottom edge, the queue-bubble center
+    /// 96pt further down, and the input area's bottom edge 64 logical units
+    /// above the cannon (unchanged from `GameLayout.fitting`'s own gap).
     func prepare(containerSize: CGSize) {
         guard engine == nil, containerSize.width > 0, containerSize.height > 0 else { return }
 
@@ -61,8 +71,20 @@ final class GameViewModel: ObservableObject {
             store.clear()
         }
 
-        let canvasHeight = GameConsts.boardLogicalWidth * Double(containerSize.height) / Double(containerSize.width)
-        let layout = GameLayout.fitting(canvasHeight: canvasHeight)
+        let areaWidth = Double(containerSize.width)
+        let areaHeight = Double(containerSize.height)
+        let scale = areaWidth / GameConsts.boardLogicalWidth
+        let canvasHeight = GameConsts.boardLogicalWidth * areaHeight / areaWidth
+        let cannonY = canvasHeight - 103 / scale
+        let queueY = cannonY + 96 / scale
+        let cannonPivotX = GameConsts.boardMinX + GameConsts.boardLogicalWidth / 2
+        let inputAreaMaxY = cannonY - 64
+        let layout = GameLayout(
+            canvasHeight: canvasHeight,
+            cannonY: cannonY,
+            inputAreaMaxY: inputAreaMaxY,
+            queuePosition: Vec2(x: cannonPivotX, y: queueY)
+        )
         let engine = makeEngine(layout)
         let scene = GameScene(engine: engine, canvasHeight: canvasHeight)
 
@@ -70,9 +92,29 @@ final class GameViewModel: ObservableObject {
         self.scene = scene
         score = engine.score
         livesLeft = engine.livesLeft
+        maxLives = engine.maxLives
 
         wireCallbacks(scene: scene)
         updateStatus()
+    }
+
+    /// Extra top gap (points) `RootView` must add above the scene's own
+    /// GeometryReader frame so the first bubble row lands 42.5pt below the
+    /// header — the Figma target. Row 0 sits `GameConsts.initialY` logical
+    /// units below the scene's own top edge; converted to points via the
+    /// same width-based `scale` `prepare(containerSize:)` uses, that is
+    /// normally less than 42.5pt, so this makes up the difference. The
+    /// caller then shrinks the container height it passes to
+    /// `prepare(containerSize:)` by this same amount, which keeps the
+    /// cannon/queue bubbles' *absolute* on-screen position unaffected: the
+    /// scene starts `inset` points lower but is also `inset` points
+    /// "shorter" in logical terms, and the two cancel out (see the spec's
+    /// worked derivation). Clamped to zero so a container that's already
+    /// tall enough never pushes the scene up into the header.
+    static func sceneTopInset(areaWidth: Double) -> Double {
+        guard areaWidth > 0 else { return 0 }
+        let scale = areaWidth / GameConsts.boardLogicalWidth
+        return max(0, 42.5 - GameConsts.initialY * scale)
     }
 
     private func wireCallbacks(scene: GameScene) {
@@ -99,13 +141,15 @@ final class GameViewModel: ObservableObject {
             guard let self, let engine = self.engine else { return }
             score = engine.score
             livesLeft = engine.livesLeft
+            maxLives = engine.maxLives
             updateStatus()
             if let snapshot = engine.snapshot() {
                 store.save(snapshot)
             }
         }
-        scene.onLivesChanged = { [weak self] livesLeft, _ in
+        scene.onLivesChanged = { [weak self] livesLeft, maxLives in
             self?.livesLeft = livesLeft
+            self?.maxLives = maxLives
             self?.updateStatus()
         }
     }

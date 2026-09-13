@@ -19,8 +19,19 @@ final class GameScene: SKScene {
     private var lastUpdateTime: TimeInterval?
     private var accumulator: TimeInterval = 0
 
-    private let cannonNode = SKNode()
-    private let livesNode = SKNode()
+    /// Last engine-reported target position for each ready/queue bubble
+    /// (`.readyToLaunch`/`.inQueue`), keyed by `Bubble.id`. Lets `sync()`
+    /// tell "target actually changed" (queue bubble promoted to ready after
+    /// a shot — animate the move) apart from "target unchanged, this is
+    /// just another frame" (leave any in-flight animation alone; see
+    /// `updateQueueSlotPosition`).
+    private var queueTargets: [Int: Vec2] = [:]
+    private let queueMoveActionKey = "queueMove"
+    /// Duration/easing for the queue-bubble-to-cannon slide (spec 20).
+    private let queueMoveDuration: TimeInterval = 0.18
+    /// Below this (logical units), a target "change" is just float noise
+    /// from re-deriving the same position — snap instead of animating.
+    private let queueMoveThreshold: Double = 1.0
 
     var onScoreChanged: ((Int) -> Void)?
     var onGameOver: ((Bool, Int, Int) -> Void)?
@@ -34,29 +45,11 @@ final class GameScene: SKScene {
         super.init(size: CGSize(width: GameConsts.boardLogicalWidth, height: canvasHeight))
         scaleMode = .aspectFit
         backgroundColor = Palette.background
-        setUpCannon()
-        addChild(livesNode)
         sync()
     }
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    private func setUpCannon() {
-        let base = SKShapeNode(circleOfRadius: 10)
-        base.fillColor = Palette.cannon
-        base.strokeColor = .clear
-
-        cannonNode.addChild(base)
-        cannonNode.position = geometry.scenePoint(engine.layout.cannonPivot)
-        cannonNode.zPosition = 5
-        addChild(cannonNode)
-        updateCannonRotation()
-    }
-
-    private func updateCannonRotation() {
-        cannonNode.zRotation = -engine.aimAngleDegrees * .pi / 180
     }
 
     // MARK: - Touches
@@ -66,7 +59,6 @@ final class GameScene: SKScene {
         let point = touch.location(in: self)
         let corePoint = geometry.corePoint(point)
         if engine.fire(toward: corePoint) {
-            updateCannonRotation()
             haptics.prepareForShot()
         }
     }
@@ -110,21 +102,34 @@ final class GameScene: SKScene {
         sync()
     }
 
-    /// Creates missing bubble nodes, updates position/color of existing ones,
-    /// removes nodes for ids no longer in `engine.bubbles` (unless animating
-    /// out), and redraws the lives row from current values.
+    /// Creates missing bubble nodes, updates position/color of existing
+    /// ones, and removes nodes for ids no longer in `engine.bubbles` (unless
+    /// animating out). Ready/queue bubbles whose target actually moved
+    /// slide to the new spot instead of snapping (see
+    /// `updateQueueSlotPosition`); everything else is repositioned directly,
+    /// same as before.
     private func sync() {
         var seenIds = Set<Int>()
         for bubble in engine.bubbles {
             seenIds.insert(bubble.id)
+            let isQueueSlot = bubble.state == .readyToLaunch || bubble.state == .inQueue
+            let scenePos = geometry.scenePoint(bubble.position)
             if let node = nodes[bubble.id] as? BubbleNode {
-                node.position = geometry.scenePoint(bubble.position)
                 node.apply(color: bubble.color)
+                if isQueueSlot {
+                    updateQueueSlotPosition(node: node, bubble: bubble, scenePos: scenePos)
+                } else {
+                    queueTargets.removeValue(forKey: bubble.id)
+                    node.position = scenePos
+                }
             } else {
                 let node = BubbleNode(color: bubble.color)
-                node.position = geometry.scenePoint(bubble.position)
+                node.position = scenePos
                 addChild(node)
                 nodes[bubble.id] = node
+                if isQueueSlot {
+                    queueTargets[bubble.id] = bubble.position
+                }
             }
         }
 
@@ -132,23 +137,29 @@ final class GameScene: SKScene {
         for id in staleIds {
             nodes[id]?.removeFromParent()
             nodes.removeValue(forKey: id)
+            queueTargets.removeValue(forKey: id)
         }
-
-        syncLivesIndicator()
     }
 
-    private func syncLivesIndicator() {
-        livesNode.removeAllChildren()
-        let baseX = 70.0
-        let y = engine.layout.cannonY
-        for i in 0..<engine.maxLives {
-            let dot = SKShapeNode(circleOfRadius: 6)
-            dot.fillColor = Palette.lifeIcon
-            dot.strokeColor = .clear
-            dot.alpha = i < engine.livesLeft ? 1.0 : 0.25
-            dot.position = geometry.scenePoint(Vec2(x: baseX + Double(i) * 16, y: y))
-            livesNode.addChild(dot)
+    /// Spec 20: when a queue bubble is promoted to ready-to-launch right
+    /// after a shot, its engine position jumps instantly from the queue spot
+    /// to the cannon pivot. Rather than snapping the node there like every
+    /// other frame, run it over as a `0.18`s ease-out slide — but only the
+    /// one frame the target actually moved by more than `queueMoveThreshold`
+    /// logical units; every later frame (target unchanged) must leave the
+    /// node/animation alone, or the slide would restart every tick.
+    private func updateQueueSlotPosition(node: SKNode, bubble: Bubble, scenePos: CGPoint) {
+        let previousTarget = queueTargets[bubble.id]
+        queueTargets[bubble.id] = bubble.position
+        guard let previousTarget else {
+            node.position = scenePos
+            return
         }
+        guard previousTarget.distance(to: bubble.position) > queueMoveThreshold else { return }
+        node.removeAction(forKey: queueMoveActionKey)
+        let move = SKAction.move(to: scenePos, duration: queueMoveDuration)
+        move.timingMode = .easeOut
+        node.run(move, withKey: queueMoveActionKey)
     }
 
     // MARK: - Events
@@ -166,10 +177,8 @@ final class GameScene: SKScene {
             case .boardReset:
                 performBoardReset()
             case let .lifeLost(livesLeft):
-                syncLivesIndicator()
                 onLivesChanged?(livesLeft, engine.maxLives)
             case let .livesReset(livesLeft, maxLives):
-                syncLivesIndicator()
                 onLivesChanged?(livesLeft, maxLives)
             case .turnResolved:
                 onTurnResolved?()
@@ -214,6 +223,7 @@ final class GameScene: SKScene {
         }
         nodes.removeAll()
         dying.removeAll()
+        queueTargets.removeAll()
         sync()
         onBoardReset?()
     }
