@@ -1,4 +1,5 @@
 import XCTest
+import Foundation
 
 final class GameplayUITests: XCTestCase {
     func testTapFiresAndRestartResets() {
@@ -48,6 +49,19 @@ final class GameplayUITests: XCTestCase {
         for offset in offsets {
             scene.coordinate(withNormalizedOffset: offset).tap()
             Thread.sleep(forTimeInterval: 1.5)
+        }
+
+        // Save a gameplay screenshot (board with landed/popped bubbles and a
+        // non-zero score) for the repo. A failure to write it must not fail
+        // the test — it's a documentation artifact, not a test assertion.
+        let screenshotDir = "/Users/dimazhuravlev/Repos/bubble-shooter/build/screenshots"
+        let screenshotPath = screenshotDir + "/gameplay.png"
+        do {
+            try FileManager.default.createDirectory(atPath: screenshotDir, withIntermediateDirectories: true)
+            let pngData = XCUIScreen.main.screenshot().pngRepresentation
+            try pngData.write(to: URL(fileURLWithPath: screenshotPath))
+        } catch {
+            print("GameplayUITests: failed to write gameplay screenshot to \(screenshotPath): \(error)")
         }
 
         XCTAssertEqual(app.state, .runningForeground, "app is no longer in the foreground")
