@@ -24,7 +24,7 @@ final class PersistenceUITests: XCTestCase {
             return
         }
         XCTAssertTrue(
-            initialValue.hasPrefix("bubbles:153 score:0"),
+            initialValue.hasPrefix("bubbles:\(startingBubbleCount) score:0"),
             "unexpected initial value: \(initialValue)"
         )
 
@@ -36,13 +36,13 @@ final class PersistenceUITests: XCTestCase {
         var sawChange = false
         let firstShotDeadline = Date().addingTimeInterval(5.0)
         while Date() < firstShotDeadline {
-            if let value = scene.value as? String, !value.hasPrefix("bubbles:153 score:0") {
+            if let value = scene.value as? String, !value.hasPrefix("bubbles:\(startingBubbleCount) score:0") {
                 sawChange = true
                 break
             }
             Thread.sleep(forTimeInterval: 0.5)
         }
-        XCTAssertTrue(sawChange, "gameScene value still starts with bubbles:153 score:0 after 5s")
+        XCTAssertTrue(sawChange, "gameScene value still starts with bubbles:\(startingBubbleCount) score:0 after 5s")
 
         // Let the turn fully resolve (engine back to idle -> .turnResolved ->
         // save-to-disk) and any cascading removals settle before treating the
@@ -69,13 +69,13 @@ final class PersistenceUITests: XCTestCase {
         var resetOK = false
         let resetDeadline = Date().addingTimeInterval(5.0)
         while Date() < resetDeadline {
-            if let value = scene.value as? String, value.hasPrefix("bubbles:153 score:0") {
+            if let value = scene.value as? String, value.hasPrefix("bubbles:\(startingBubbleCount) score:0") {
                 resetOK = true
                 break
             }
             Thread.sleep(forTimeInterval: 0.2)
         }
-        XCTAssertTrue(resetOK, "board did not reset to bubbles:153 score:0 within 5s after Restart")
+        XCTAssertTrue(resetOK, "board did not reset to bubbles:\(startingBubbleCount) score:0 within 5s after Restart")
 
         // Restart's own save should stick: relaunching (still no -resetSave)
         // must resume the fresh post-restart match, not the old in-flight one.
@@ -88,7 +88,7 @@ final class PersistenceUITests: XCTestCase {
             return
         }
         XCTAssertTrue(
-            freshValue.hasPrefix("bubbles:153 score:0"),
+            freshValue.hasPrefix("bubbles:\(startingBubbleCount) score:0"),
             "unexpected value after restart+relaunch: \(freshValue)"
         )
     }

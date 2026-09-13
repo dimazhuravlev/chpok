@@ -31,7 +31,7 @@ final class GameScene: SKScene {
     init(engine: GameEngine, canvasHeight: Double) {
         self.engine = engine
         self.geometry = SceneGeometry(canvasHeight: canvasHeight)
-        super.init(size: CGSize(width: 560, height: canvasHeight))
+        super.init(size: CGSize(width: GameConsts.boardLogicalWidth, height: canvasHeight))
         scaleMode = .aspectFit
         backgroundColor = Palette.background
         setUpCannon()

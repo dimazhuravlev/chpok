@@ -1,6 +1,13 @@
 import XCTest
 import Foundation
 
+/// Starting bubble count for a fresh 9-row board: rows alternate wide (17
+/// bubbles) and narrow (16 bubbles) so both board edges stay straight (spec
+/// 13's staggered row widths) — 5 wide + 4 narrow rows = 5*17 + 4*16 = 149.
+/// Shared with `PersistenceUITests`; update in this one place if the
+/// starting grid ever changes.
+let startingBubbleCount = 149
+
 final class GameplayUITests: XCTestCase {
     func testTapFiresAndRestartResets() {
         let app = XCUIApplication()
@@ -18,7 +25,7 @@ final class GameplayUITests: XCTestCase {
             return
         }
         XCTAssertTrue(
-            initialValue.hasPrefix("bubbles:153 score:0"),
+            initialValue.hasPrefix("bubbles:\(startingBubbleCount) score:0"),
             "unexpected initial value: \(initialValue)"
         )
 
@@ -71,12 +78,12 @@ final class GameplayUITests: XCTestCase {
         var resetOK = false
         let resetDeadline = Date().addingTimeInterval(3.0)
         while Date() < resetDeadline {
-            if let value = scene.value as? String, value.hasPrefix("bubbles:153 score:0") {
+            if let value = scene.value as? String, value.hasPrefix("bubbles:\(startingBubbleCount) score:0") {
                 resetOK = true
                 break
             }
             Thread.sleep(forTimeInterval: 0.2)
         }
-        XCTAssertTrue(resetOK, "board did not reset to bubbles:153 score:0 within 3s after Restart")
+        XCTAssertTrue(resetOK, "board did not reset to bubbles:\(startingBubbleCount) score:0 within 3s after Restart")
     }
 }

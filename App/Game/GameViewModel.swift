@@ -61,7 +61,7 @@ final class GameViewModel: ObservableObject {
             store.clear()
         }
 
-        let canvasHeight = 560 * Double(containerSize.height) / Double(containerSize.width)
+        let canvasHeight = GameConsts.boardLogicalWidth * Double(containerSize.height) / Double(containerSize.width)
         let layout = GameLayout.fitting(canvasHeight: canvasHeight)
         let engine = makeEngine(layout)
         let scene = GameScene(engine: engine, canvasHeight: canvasHeight)

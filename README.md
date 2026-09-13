@@ -50,6 +50,7 @@ See `docs/original-game-logic.md` for the full derivation — every rule, timer,
 - **Tap = shoot**: chosen deliberately to mirror the original's pointer-down semantics 1:1, even though many touch games fire on release instead.
 - Board uses true hexagonal packing: row height is 32·√3/2 ≈ 27.71 instead of the original's 32, so all six neighbours of a cell are exactly one bubble diameter apart and the rows have no gaps between them.
 - Bubbles are drawn 30 px wide on a 32 px grid with no stroke, leaving an even 2 px gap; the app is rendered on a pure black background.
+- Rows alternate 17 and 16 bubbles so both board edges are straight; the parity reference flips with every dropped row, so the board keeps its silhouette and no longer shifts sideways.
 
 ## Not ported
 
