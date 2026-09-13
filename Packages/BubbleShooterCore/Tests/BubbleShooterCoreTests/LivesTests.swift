@@ -123,18 +123,31 @@ final class LivesTests: XCTestCase {
         XCTAssertEqual(col8.position, Vec2(x: 296, y: Grid.realCoord(boardX: 8, boardY: 4).y))
         XCTAssertEqual(col8.position.x, 296)
 
-        // 4 new rows of 17 columns each; every new bubble's color was
-        // already present before the row-add (blue/red/green).
+        // 4 new rows, alternating narrow/wide as rowParity flips on every
+        // addOneRow call (spec 13): starting rowParity 0, the 4 flips land
+        // the newest row (boardY 0) back on rowParity 0 (wide, 17), then
+        // boardY 1 narrow (16), boardY 2 wide (17), boardY 3 narrow (16) —
+        // 17+16+17+16 = 66, not the pre-spec-13 flat 17*4=68. Every new
+        // bubble's color was already present before the row-add
+        // (blue/red/green).
         let newRows = engine.boardBubbles.filter { $0.boardY < 4 }
-        XCTAssertEqual(newRows.count, 17 * 4)
+        XCTAssertEqual(newRows.count, 66)
+        let newRowsByY = Dictionary(grouping: newRows, by: { $0.boardY })
+        XCTAssertEqual(newRowsByY[0]?.count, 17)
+        XCTAssertEqual(newRowsByY[1]?.count, 16)
+        XCTAssertEqual(newRowsByY[2]?.count, 17)
+        XCTAssertEqual(newRowsByY[3]?.count, 16)
         XCTAssertTrue(newRows.allSatisfy { [.blue, .red, .green].contains($0.color) },
                        "new row bubbles must only use colors that were already present")
     }
 
-    // (c) parity shift: a single row-add flips (8,0)'s row from even to
-    // odd, so its recomputed x picks up the +16 odd-row offset even though
-    // the column index (8) didn't change.
-    func testRowAddRecomputesParityOffset() {
+    // (c) spec 13: `rowParity` flips together with the shift, so a single
+    // row-add no longer moves (8,0)'s X at all — it becomes (8,1), still
+    // wide-row-classified (see `GameEngine.addOneRow`'s doc comment), so
+    // `Grid.realCoord`'s X offset is unchanged. This replaces the pre-spec-13
+    // behaviour this test used to document, where the whole board visibly
+    // jumped sideways by half a bubble on every row add.
+    func testRowAddPreservesXAcrossParityFlip() {
         // All 6 colors present in row 0 (17 columns, col -> (col+4)%6 so
         // that column 8 specifically lands on blue) => 0 absent => count=1.
         func colorFor(_ col: Int) -> BubbleColor {
@@ -154,6 +167,9 @@ final class LivesTests: XCTestCase {
         )
         engine.advance(ms: 510)
 
+        let originalCol8 = engine.boardBubbles.first { $0.boardX == 8 && $0.boardY == 0 }
+        XCTAssertEqual(originalCol8?.position.x, 296)
+
         // green (the ready color) doesn't match (8,0)=blue or either of its
         // row-0 neighbours, so this is a guaranteed miss.
         XCTAssertTrue(engine.fire(angleDegrees: 0))
@@ -162,12 +178,18 @@ final class LivesTests: XCTestCase {
 
         XCTAssertFalse(events.contains { if case .removed = $0 { return true }; return false })
         XCTAssertTrue(events.contains(.rowsAdded(count: 1)), "\(events)")
+        XCTAssertEqual(engine.rowParity, 1, "a single row add flips rowParity exactly once")
 
         guard let shiftedCol8 = engine.boardBubbles.first(where: { $0.boardX == 8 && $0.boardY == 1 }) else {
             XCTFail("expected (8,0) to have become (8,1)")
             return
         }
         XCTAssertEqual(shiftedCol8.color, .blue)
-        XCTAssertEqual(shiftedCol8.position.x, 312, "odd row 1 adds the +16 parity offset: 40 + 8*32 + 16")
+        XCTAssertEqual(shiftedCol8.position.x, 296, "X must be preserved across the row add — no more sideways jump")
+
+        // The new row 0 is narrow (16 columns), since rowParity flipped to 1.
+        let newRow = engine.boardBubbles.filter { $0.boardY == 0 }
+        XCTAssertEqual(newRow.count, 16)
+        XCTAssertEqual(Set(newRow.map(\.boardX)), Set(0..<16))
     }
 }

@@ -15,22 +15,25 @@ final class InitBoardTests: XCTestCase {
     func testInitialBoardComposition() {
         let engine = GameEngine(random: SeededGameRandom(seed: 42))
 
-        XCTAssertEqual(engine.bubbles.count, 155)
-        XCTAssertEqual(engine.boardBubbles.count, 153)
+        XCTAssertEqual(engine.bubbles.count, 151)
+        XCTAssertEqual(engine.boardBubbles.count, 149)
+        XCTAssertEqual(engine.rowParity, 0)
 
-        // Every row 0..8 contains exactly columns 0..16.
+        // Rows 0..8 alternate wide (17 columns)/narrow (16 columns) per
+        // spec 13: 5 wide (even rows) + 4 narrow (odd rows) = 149.
         var byRow: [Int: Set<Int>] = [:]
         for b in engine.boardBubbles {
             byRow[b.boardY, default: []].insert(b.boardX)
         }
         XCTAssertEqual(Set(byRow.keys), Set(0...8))
         for row in 0...8 {
-            XCTAssertEqual(byRow[row], Set(0...16), "row \(row) should have columns 0..16")
+            let width = Grid.columns(inRow: row, rowParity: engine.rowParity)
+            XCTAssertEqual(byRow[row], Set(0..<width), "row \(row) should have columns 0..<\(width)")
         }
 
         // Positions match Grid.realCoord.
         for b in engine.boardBubbles {
-            XCTAssertEqual(b.position, Grid.realCoord(boardX: b.boardX, boardY: b.boardY))
+            XCTAssertEqual(b.position, Grid.realCoord(boardX: b.boardX, boardY: b.boardY, rowParity: engine.rowParity))
         }
 
         guard let ready = engine.readyBubble, let queue = engine.queueBubble else {

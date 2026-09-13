@@ -37,17 +37,20 @@ public struct GameLayout: Equatable {
         return GameLayout(canvasHeight: canvasHeight, cannonY: cannonY, inputAreaMaxY: inputAreaMaxY)
     }
 
-    /// `Cannon` pivot, `(WIDTH*0.37, cannonY)`. X is fixed as in the
-    /// original (see game-logic.md §0/§4); only Y follows the layout.
-    public var cannonPivot: Vec2 { Vec2(x: 296, y: cannonY) }
+    /// `Cannon` pivot, originally `(WIDTH*0.37, cannonY)`; X is now derived
+    /// as the center of the board's logical span (spec 13), which happens
+    /// to equal the original's fixed 296 exactly. Only Y follows the layout.
+    public var cannonPivot: Vec2 { Vec2(x: GameConsts.boardMinX + GameConsts.boardLogicalWidth / 2, y: cannonY) }
 
-    /// Ready-bubble position, `(WIDTH*0.37, cannonY)` — same point as the
-    /// cannon pivot (see game-logic.md §0: the ready bubble converges to the
-    /// cannon's own position every tick via `setToMyRealCoord`).
-    public var readyPosition: Vec2 { Vec2(x: 296, y: cannonY) }
+    /// Ready-bubble position — same point as the cannon pivot (see
+    /// game-logic.md §0: the ready bubble converges to the cannon's own
+    /// position every tick via `setToMyRealCoord`).
+    public var readyPosition: Vec2 { Vec2(x: GameConsts.boardMinX + GameConsts.boardLogicalWidth / 2, y: cannonY) }
 
-    /// Queue-bubble position, `(WIDTH*0.05, cannonY)`.
-    public var queuePosition: Vec2 { Vec2(x: 40, y: cannonY) }
+    /// Queue-bubble position, `(GameConsts.initialX, cannonY)` — originally
+    /// `WIDTH*0.05`, which is the same 40px value as the board's own X
+    /// origin.
+    public var queuePosition: Vec2 { Vec2(x: GameConsts.initialX, y: cannonY) }
 
     /// Whether `p` falls inside the cannon's clickable rectangle
     /// (`onInputDown` only fires for pointer-downs inside it).

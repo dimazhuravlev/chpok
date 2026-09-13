@@ -78,9 +78,12 @@ final class FlightTests: XCTestCase {
         let landed = engine.boardBubbles.first { $0.id == firedId }
         XCTAssertNotNil(landed)
         XCTAssertEqual(landed?.boardY, 0)
+        // Row 0 is wide at the default rowParity 0, so a landed bubble's X
+        // must fall exactly within the wide row's span (spec 13 tightens
+        // this from the old, looser 37...585 bounds — see GameConsts).
         if let x = landed?.position.x {
-            XCTAssertGreaterThanOrEqual(x, 37)
-            XCTAssertLessThanOrEqual(x, 585)
+            XCTAssertGreaterThanOrEqual(x, GameConsts.leftBoardBorder)
+            XCTAssertLessThanOrEqual(x, GameConsts.rightBoardBorder)
         }
     }
 

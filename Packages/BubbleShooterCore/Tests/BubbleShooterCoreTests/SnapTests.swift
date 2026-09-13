@@ -26,6 +26,14 @@ final class SnapTests: XCTestCase {
             // can remove the just-landed bubble (delay 70*i with i=0)
             // before we get a chance to look it up (game-logic.md §8).
             let priorCoords = engine.boardBubbles.map { [$0.boardX, $0.boardY] }
+            // Spec 13: `rowParity` can itself change *during* this shot's own
+            // resolution (a miss that empties lives triggers a row-add,
+            // which flips it) — captured here, alongside `priorCoords`,
+            // because the bubble actually lands under whatever `rowParity`
+            // was active at landing time, which is always this
+            // *pre*-resolution value: `resolveLanding` runs before
+            // `bubbleArrived` -> `loseOneLife` -> any row-add it triggers.
+            let rowParityAtLanding = engine.rowParity
 
             XCTAssertTrue(engine.fire(angleDegrees: angle), "shot \(i) at \(angle) degrees should fire")
             engine.runUntilIdle()
@@ -40,7 +48,7 @@ final class SnapTests: XCTestCase {
             }
 
             let isNeighbourOfPriorBoard = priorCoords.contains {
-                Grid.areNeighbours(ax: landedX, ay: landedY, bx: $0[0], by: $0[1])
+                Grid.areNeighbours(ax: landedX, ay: landedY, bx: $0[0], by: $0[1], rowParity: rowParityAtLanding)
             }
             if !(isNeighbourOfPriorBoard || landedY == 0) {
                 adjacencyViolations.append((i, landedX, landedY))

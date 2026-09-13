@@ -47,6 +47,12 @@ public final class GameEngine {
     public internal(set) var timeMs: Int = 0
     /// Original convention: 0 = up, positive = right, range [-75, 75].
     public internal(set) var aimAngleDegrees: Double = 0
+    /// Spec 13: 0 or 1, flips every time a row is added (`addOneRow`).
+    /// Determines which rows are currently wide vs. narrow (`Grid.isWideRow`)
+    /// — see `Grid`'s type doc for the full picture. Starts at 0 for a fresh
+    /// or explicit-board engine; restored from `GameSnapshot.rowParity` for
+    /// a resumed one.
+    public internal(set) var rowParity: Int = 0
 
     /// No launched bubble, nothing mid-removal, no pending one-shot
     /// `TimerQueue` gameplay action, and no row-add in progress.
@@ -112,6 +118,7 @@ public final class GameEngine {
         self.livesLeft = snapshot.livesLeft
         self.maxLives = snapshot.maxLives
         self.totalColors = snapshot.totalColors
+        self.rowParity = snapshot.rowParity
         loadBoard(snapshot.bubbles, readyColor: snapshot.readyColor, queueColor: snapshot.queueColor)
         armCannonEnableLockout()
     }
@@ -257,6 +264,12 @@ public final class GameEngine {
         totalColors = GameConsts.totalColors
         isGameOver = false
         isAddingRow = false
+        // Spec 13: a fresh board is always 5 wide + 4 narrow rows (149
+        // bubbles) — without this, resetting after any row-adds (which
+        // flip `rowParity`) would rebuild the "fresh" board under a stale,
+        // non-zero parity and silently produce a different (148-bubble)
+        // wide/narrow split.
+        rowParity = 0
 
         buildFullRandomBoardAndQueue()
         armCannonEnableLockout()
@@ -275,7 +288,8 @@ public final class GameEngine {
             score: score,
             livesLeft: livesLeft,
             maxLives: maxLives,
-            totalColors: totalColors
+            totalColors: totalColors,
+            rowParity: rowParity
         )
     }
 }

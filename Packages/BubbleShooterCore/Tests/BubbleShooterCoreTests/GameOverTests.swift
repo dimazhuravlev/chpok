@@ -64,7 +64,7 @@ final class GameOverTests: XCTestCase {
 
         XCTAssertFalse(engine.isGameOver)
         XCTAssertEqual(engine.score, 0)
-        XCTAssertEqual(engine.boardBubbles.count, 153)
+        XCTAssertEqual(engine.boardBubbles.count, 149)
         XCTAssertEqual(engine.livesLeft, 5)
         XCTAssertEqual(engine.maxLives, 5)
         XCTAssertTrue(engine.drainEvents().contains(.boardReset))

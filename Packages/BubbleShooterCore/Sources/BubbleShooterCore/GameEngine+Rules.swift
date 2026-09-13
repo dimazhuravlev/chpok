@@ -10,12 +10,15 @@ extension GameEngine {
     // MARK: - §2 init / reset
 
     /// Mirrors the board-building portion of `BoardManager.initBoard`: a
-    /// fully-random 17x9 board, then one queue-seed bubble immediately
-    /// promoted via `addNewBubble()` (mirrors `initBoard`'s
-    /// `Bubble(..., .inQueue)` + `BoardManager.addNewBubble()` pair).
+    /// fully-random board (9 rows, alternating wide/narrow per spec 13 —
+    /// see `Grid.isWideRow`; 5 wide + 4 narrow = 149 bubbles at the default
+    /// `rowParity == 0`), then one queue-seed bubble immediately promoted
+    /// via `addNewBubble()` (mirrors `initBoard`'s `Bubble(..., .inQueue)` +
+    /// `BoardManager.addNewBubble()` pair).
     func buildFullRandomBoardAndQueue() {
         for i in stride(from: GameConsts.boardHeight - 1, through: 0, by: -1) {
-            for j in stride(from: GameConsts.boardWidth - 1, through: 0, by: -1) {
+            let width = Grid.columns(inRow: i, rowParity: rowParity)
+            for j in stride(from: width - 1, through: 0, by: -1) {
                 let color = getRandomColor(fullyRandom: true)
                 bubbles.append(makeBubble(color: color, boardX: j, boardY: i, state: .onBoard))
             }
@@ -53,7 +56,7 @@ extension GameEngine {
         let position: Vec2
         switch state {
         case .onBoard, .launched:
-            position = Grid.realCoord(boardX: boardX, boardY: boardY)
+            position = Grid.realCoord(boardX: boardX, boardY: boardY, rowParity: rowParity)
         case .readyToLaunch:
             position = layout.readyPosition
         case .inQueue:
@@ -199,7 +202,7 @@ extension GameEngine {
             y: bubble.position.y - 0.05 * bubble.velocity.y
         )
         assignStateDefaultCoords(bubble, anchor: anchor)
-        bubble.position = Grid.realCoord(boardX: bubble.boardX, boardY: bubble.boardY)
+        bubble.position = Grid.realCoord(boardX: bubble.boardX, boardY: bubble.boardY, rowParity: rowParity)
         bubble.state = .onBoard
         launchedBubble = nil
         events.append(.landed(id: bubble.id, boardX: bubble.boardX, boardY: bubble.boardY))
@@ -220,21 +223,34 @@ extension GameEngine {
 
     /// Mirrors `BoardManager.assignStateDefaultCoords`: searches backward
     /// along the velocity vector (`counter` steps of `0.25*v`) for the first
-    /// unoccupied cell. `boardX` gets a single decrement if `>= boardWidth`
-    /// (not a full clamp) and a hard clamp to 0 if negative; `boardY` is
-    /// never clamped — both exactly as the original (game-logic.md §6,
-    /// §17.9).
+    /// cell that is both in-range and unoccupied. `boardY` is never clamped
+    /// — exactly as the original (game-logic.md §6, §17.9).
     ///
     /// Deviation from the original (by decision — see `GameConsts.rowHeight`):
     /// the row snap divides by `GameConsts.rowHeight`, not `bubbleSize`, to
     /// match `Grid.realCoord`'s true hex-packing row pitch. The rollback
-    /// step (`0.25*counter*v`) and the horizontal snap (`bx`, parity shift,
-    /// `0.9999` fudge factor) are unchanged — those stay in `bubbleSize`.
+    /// step (`0.25*counter*v`) and the horizontal snap (`bx`, wide/narrow
+    /// shift, `0.9999` fudge factor) are otherwise unchanged.
+    ///
+    /// Deviation (spec 13): the original's one-off hack — decrement
+    /// `boardX` by 1 if `>= boardWidth`, else hard-clamp negative `boardX`
+    /// to 0 — assumed every row was `boardWidth` (17) wide, which is no
+    /// longer true (rows alternate wide/narrow). It is replaced by a cell
+    /// *validity* rule: a candidate cell is usable only if
+    /// `0 <= boardX < Grid.columns(inRow: boardY, rowParity:)` *and* free;
+    /// otherwise the retry loop keeps rolling back along the velocity
+    /// vector, exactly as it already does for an occupied cell. This
+    /// terminates for the same reason an occupied-cell search always did:
+    /// rolling back enough steps walks the trial point back toward the
+    /// cannon's own pivot, which sits at a column safely inside *both*
+    /// row widths (well clear of the wide-only rightmost column) — so a
+    /// valid, unoccupied cell is always found within a bounded number of
+    /// steps, never an infinite loop.
     func assignStateDefaultCoords(_ bubble: Bubble, anchor: Vec2) {
         var counter = 0
-        var occupied: Bool
+        var cellUnavailable: Bool
         repeat {
-            occupied = false
+            cellUnavailable = false
             var bx = anchor.x - 0.25 * Double(counter) * bubble.velocity.x
             var by = anchor.y - 0.25 * Double(counter) * bubble.velocity.y
             counter += 1
@@ -243,22 +259,26 @@ extension GameEngine {
             by -= GameConsts.initialY
 
             let boardY = jsRound(by / GameConsts.rowHeight)
-            bx -= Double(boardY % 2) * GameConsts.bubbleSize * 0.5
-            var boardX = jsRound(bx * 0.9999 / GameConsts.bubbleSize)
+            if !Grid.isWideRow(boardY, rowParity: rowParity) {
+                bx -= GameConsts.bubbleSize * 0.5
+            }
+            let boardX = jsRound(bx * 0.9999 / GameConsts.bubbleSize)
 
-            if boardX >= GameConsts.boardWidth { boardX -= 1 }
-            if boardX < 0 { boardX = 0 }
+            if boardX < 0 || boardX >= Grid.columns(inRow: boardY, rowParity: rowParity) {
+                cellUnavailable = true
+                continue
+            }
 
             bubble.boardX = boardX
             bubble.boardY = boardY
 
             for other in bubbles where other !== bubble {
                 if other.boardX == boardX && other.boardY == boardY {
-                    occupied = true
+                    cellUnavailable = true
                     break
                 }
             }
-        } while occupied
+        } while cellUnavailable
     }
 
     /// Mirrors `BoardManager.bubbleArrived`: flood-fills the same-color
@@ -304,7 +324,7 @@ extension GameEngine {
     func neighbours(of bubble: Bubble) -> [Bubble] {
         bubbles.filter {
             $0 !== bubble && $0.state == .onBoard
-                && Grid.areNeighbours(ax: bubble.boardX, ay: bubble.boardY, bx: $0.boardX, by: $0.boardY)
+                && Grid.areNeighbours(ax: bubble.boardX, ay: bubble.boardY, bx: $0.boardX, by: $0.boardY, rowParity: rowParity)
         }
     }
 
@@ -493,17 +513,33 @@ extension GameEngine {
     /// row (including ready/queue, whose `boardY` is otherwise unused —
     /// matches the original shifting all of `bubbleArr` unconditionally),
     /// forcing an immediate (not next-tick) game-over check per shifted
-    /// onboard bubble, then fills row 0 with `boardWidth` new bubbles.
+    /// onboard bubble, then fills row 0 with new bubbles.
+    ///
+    /// Spec 13: `rowParity` flips exactly once per call, *before* the
+    /// per-bubble shift, not once per bubble. This is what keeps the board
+    /// from jumping sideways: a bubble at `(x, y)` classified wide/narrow
+    /// under the old `rowParity` ends up at `(x, y+1)` under the flipped
+    /// `1 - rowParity`, and those two classifications always agree (the
+    /// class is `(rowParity + boardY) mod 2`, and flipping both operands by
+    /// 1 leaves the sum's parity unchanged) — so its `Grid.realCoord` X
+    /// offset, and therefore its on-screen X, never changes here, only Y
+    /// (via `boardY += 1`). The new top row is filled with
+    /// `Grid.columns(inRow: 0, rowParity:)` bubbles under the *new*
+    /// (already-flipped) parity, continuing the alternating wide/narrow
+    /// silhouette.
     func addOneRow() {
+        rowParity = 1 - rowParity
+
         for b in bubbles {
             b.boardY += 1
             if b.state == .onBoard {
-                b.position = Grid.realCoord(boardX: b.boardX, boardY: b.boardY)
+                b.position = Grid.realCoord(boardX: b.boardX, boardY: b.boardY, rowParity: rowParity)
                 checkGameOver(for: b)
             }
         }
 
-        for i in stride(from: GameConsts.boardWidth - 1, through: 0, by: -1) {
+        let newRowWidth = Grid.columns(inRow: 0, rowParity: rowParity)
+        for i in stride(from: newRowWidth - 1, through: 0, by: -1) {
             let color = getRandomColor(fullyRandom: false)
             bubbles.append(makeBubble(color: color, boardX: i, boardY: 0, state: .onBoard))
         }

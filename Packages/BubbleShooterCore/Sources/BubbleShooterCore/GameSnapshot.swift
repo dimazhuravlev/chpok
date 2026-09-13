@@ -22,6 +22,14 @@ public struct GameSnapshot: Codable, Equatable {
     public var livesLeft: Int
     public var maxLives: Int
     public var totalColors: Int
+    /// Spec 13: `GameEngine.rowParity` at the time of the snapshot — needed
+    /// to reconstruct which rows are wide vs. narrow (`Grid.isWideRow`) on
+    /// restore. Required for `Codable` (no `decodeIfPresent` fallback): a
+    /// snapshot encoded before spec 13 has no matching board shape anyway
+    /// (it was a uniform 17-wide grid), so failing to decode an old save
+    /// rather than silently guessing a parity is the correct behaviour —
+    /// see `GameSaveStore.load()`.
+    public var rowParity: Int
 
     public init(
         bubbles: [BubbleRecord],
@@ -30,7 +38,8 @@ public struct GameSnapshot: Codable, Equatable {
         score: Int,
         livesLeft: Int,
         maxLives: Int,
-        totalColors: Int
+        totalColors: Int,
+        rowParity: Int = 0
     ) {
         self.bubbles = bubbles
         self.readyColor = readyColor
@@ -39,5 +48,6 @@ public struct GameSnapshot: Codable, Equatable {
         self.livesLeft = livesLeft
         self.maxLives = maxLives
         self.totalColors = totalColors
+        self.rowParity = rowParity
     }
 }

@@ -8,8 +8,10 @@ final class EngineSmokeTests: XCTestCase {
     func testInitialBoardComposition() {
         let engine = GameEngine(random: SeededGameRandom(seed: 42))
 
-        XCTAssertEqual(engine.boardBubbles.count, 153)
+        XCTAssertEqual(engine.boardBubbles.count, 149)
         XCTAssertEqual(Set(engine.boardBubbles.map { $0.boardY }), Set(0...8))
+        // Wide rows use the full 0...16; narrow rows only ever use 0...15,
+        // so the union across all 9 rows is still 0...16 (spec 13).
         XCTAssertEqual(Set(engine.boardBubbles.map { $0.boardX }), Set(0...16))
         XCTAssertNotNil(engine.readyBubble)
         XCTAssertNotNil(engine.queueBubble)
@@ -86,11 +88,17 @@ final class EngineSmokeTests: XCTestCase {
     // DoD #4 — constants
     func testConstants() {
         XCTAssertEqual(GameConsts.boardWidth, 17)
+        XCTAssertEqual(GameConsts.narrowBoardWidth, 16)
         XCTAssertEqual(GameConsts.bubbleSize, 32)
         XCTAssertEqual(GameConsts.launchPower, 18)
         XCTAssertEqual(GameConsts.collisionDistance, 24)
-        XCTAssertEqual(GameConsts.leftBoardBorder, 37)
-        XCTAssertEqual(GameConsts.rightBoardBorder, 561)
+        // Spec 13: derived from boardMinX/boardMaxX, no longer independent
+        // magic numbers (37/561).
+        XCTAssertEqual(GameConsts.boardMinX, 24)
+        XCTAssertEqual(GameConsts.boardMaxX, 568)
+        XCTAssertEqual(GameConsts.boardLogicalWidth, 544)
+        XCTAssertEqual(GameConsts.leftBoardBorder, 40)
+        XCTAssertEqual(GameConsts.rightBoardBorder, 552)
     }
 
     // DoD #4 — layout
