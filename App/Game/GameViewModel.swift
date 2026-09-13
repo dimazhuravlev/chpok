@@ -25,14 +25,41 @@ final class GameViewModel: ObservableObject {
     private(set) var engine: GameEngine?
     private(set) var scene: GameScene?
 
-    var makeEngine: (GameLayout) -> GameEngine = { GameEngine(layout: $0) }
+    /// Persists/restores the in-progress match; see `GameSaveStore`.
+    let store: GameSaveStore
+
+    var makeEngine: (GameLayout) -> GameEngine
     var onTurnResolved: ((GameEngine) -> Void)?
     var onGameOverHook: ((GameEngine) -> Void)?
+
+    init(store: GameSaveStore = GameSaveStore()) {
+        self.store = store
+        makeEngine = { layout in
+            if let snapshot = store.load() {
+                return GameEngine(snapshot: snapshot, layout: layout)
+            }
+            return GameEngine(layout: layout)
+        }
+        // Default seam behavior: save after every resolved turn, clear once
+        // the match ends. `wireCallbacks` invokes these with the live engine.
+        onTurnResolved = { engine in
+            if let snapshot = engine.snapshot() {
+                store.save(snapshot)
+            }
+        }
+        onGameOverHook = { _ in
+            store.clear()
+        }
+    }
 
     /// Creates the engine/scene once a non-zero container size is known.
     /// Later calls (e.g. from further size changes) are ignored.
     func prepare(containerSize: CGSize) {
         guard engine == nil, containerSize.width > 0, containerSize.height > 0 else { return }
+
+        if CommandLine.arguments.contains("-resetSave") {
+            store.clear()
+        }
 
         let canvasHeight = 560 * Double(containerSize.height) / Double(containerSize.width)
         let layout = GameLayout.fitting(canvasHeight: canvasHeight)
@@ -73,6 +100,9 @@ final class GameViewModel: ObservableObject {
             score = engine.score
             livesLeft = engine.livesLeft
             updateStatus()
+            if let snapshot = engine.snapshot() {
+                store.save(snapshot)
+            }
         }
         scene.onLivesChanged = { [weak self] livesLeft, _ in
             self?.livesLeft = livesLeft
@@ -97,5 +127,13 @@ final class GameViewModel: ObservableObject {
     /// OK button on the game-over popup: same effect as Restart.
     func dismissGameOver() {
         restart()
+    }
+
+    /// Called by `RootView` when `scenePhase` leaves `.active`. Saves only if
+    /// the engine is currently idle (`snapshot()` non-nil); if a bubble is
+    /// mid-flight, the previous on-disk save is left untouched.
+    func persistIfPossible() {
+        guard let engine, let snapshot = engine.snapshot() else { return }
+        store.save(snapshot)
     }
 }

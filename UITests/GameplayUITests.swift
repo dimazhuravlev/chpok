@@ -3,6 +3,7 @@ import XCTest
 final class GameplayUITests: XCTestCase {
     func testTapFiresAndRestartResets() {
         let app = XCUIApplication()
+        app.launchArguments = ["-resetSave"]
         app.launch()
 
         var scene = app.otherElements["gameScene"]
