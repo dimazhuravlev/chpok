@@ -18,11 +18,19 @@ public struct GameLayout: Equatable {
     public var cannonY: Double
     /// Bottom edge of the clickable input rectangle. Original: 505 (= 25 + 480).
     public var inputAreaMaxY: Double
+    /// Queue-bubble draw position — where the queue bubble is rendered.
+    /// Purely a drawing point set by layout/the app; it has no effect on
+    /// game rules. Defaults to `(GameConsts.initialX, cannonY)` (originally
+    /// `WIDTH*0.05`, the same 40px value as the board's own X origin) when
+    /// not supplied, so `.original`, `.fitting(canvasHeight:)` and existing
+    /// callers keep their previous value unchanged.
+    public let queuePosition: Vec2
 
-    public init(canvasHeight: Double, cannonY: Double, inputAreaMaxY: Double) {
+    public init(canvasHeight: Double, cannonY: Double, inputAreaMaxY: Double, queuePosition: Vec2? = nil) {
         self.canvasHeight = canvasHeight
         self.cannonY = cannonY
         self.inputAreaMaxY = inputAreaMaxY
+        self.queuePosition = queuePosition ?? Vec2(x: GameConsts.initialX, y: cannonY)
     }
 
     /// Reproduces the original's fixed 800x600 canvas exactly.
@@ -55,11 +63,6 @@ public struct GameLayout: Equatable {
     /// game-logic.md §0: the ready bubble converges to the cannon's own
     /// position every tick via `setToMyRealCoord`).
     public var readyPosition: Vec2 { Vec2(x: GameConsts.boardMinX + GameConsts.boardLogicalWidth / 2, y: cannonY) }
-
-    /// Queue-bubble position, `(GameConsts.initialX, cannonY)` — originally
-    /// `WIDTH*0.05`, which is the same 40px value as the board's own X
-    /// origin.
-    public var queuePosition: Vec2 { Vec2(x: GameConsts.initialX, y: cannonY) }
 
     /// Whether `p` falls inside the cannon's clickable rectangle
     /// (`onInputDown` only fires for pointer-downs inside it).

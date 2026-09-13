@@ -37,4 +37,18 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(layout.gameOverRow, 29)
         XCTAssertEqual(layout.gameOverY, 825.6715747119590, accuracy: 1e-9)
     }
+
+    // Spec 19: `queuePosition` becomes a stored property, defaulting to the
+    // previous computed value when the app doesn't supply its own.
+    func testQueuePositionDefaultsAndOverride() {
+        XCTAssertEqual(GameLayout.original.queuePosition, Vec2(x: 40, y: 552))
+        XCTAssertEqual(GameLayout.fitting(canvasHeight: 1000).queuePosition, Vec2(x: 40, y: 920))
+        let custom = GameLayout(
+            canvasHeight: 1000,
+            cannonY: 920,
+            inputAreaMaxY: 856,
+            queuePosition: Vec2(x: 296, y: 1050)
+        )
+        XCTAssertEqual(custom.queuePosition, Vec2(x: 296, y: 1050))
+    }
 }
