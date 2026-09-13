@@ -106,8 +106,20 @@ extension GameEngine {
     /// Mirrors `Bubble.prototype.launch(angle, distance)` (the `distance`
     /// parameter is computed by the caller in the original but never used
     /// inside `launch`, so it has no Swift counterpart here).
+    ///
+    /// Fix (08 final review): also updates `aimAngleDegrees`. `fire(toward:)`/
+    /// `fire(angleDegrees:)` previously computed the correct launch angle
+    /// locally and used it only for the velocity vector, never writing it to
+    /// `aimAngleDegrees` — that published property was only ever set by
+    /// `aim(toward:)`, which this app never calls (no drag-aiming, tap fires
+    /// immediately per 05-game-scene-ui.md). Since `GameScene` rotates the
+    /// cannon sprite from `engine.aimAngleDegrees` right after a successful
+    /// fire (`updateCannonRotation`), the cannon visually never turned to
+    /// face a shot, even though the bubble itself flew in the right
+    /// direction (05's "Пушка поворачивается на угол выстрела").
     func performLaunch(_ bubble: Bubble, angleDegrees: Double) {
         bubble.state = .launched
+        aimAngleDegrees = angleDegrees
         let rad = (angleDegrees + 90) * Double.pi / 180
         bubble.velocity = Vec2(x: -GameConsts.launchPower * cos(rad), y: -GameConsts.launchPower * sin(rad))
         readyBubble = nil
