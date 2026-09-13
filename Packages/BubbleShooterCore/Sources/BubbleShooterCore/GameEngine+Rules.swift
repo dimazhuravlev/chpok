@@ -128,6 +128,10 @@ extension GameEngine {
         readyBubble = nil
         launchedBubble = bubble
         turnInProgress = true
+        // Spec 18: reset the flight sub-step accumulator so every shot's
+        // per-tick cadence (1 step, then 2, then 1, ...) starts the same way
+        // regardless of how many idle ticks preceded this shot.
+        flightAccumulator = 0
         events.append(.launched(id: bubble.id, angleDegrees: angleDegrees))
     }
 

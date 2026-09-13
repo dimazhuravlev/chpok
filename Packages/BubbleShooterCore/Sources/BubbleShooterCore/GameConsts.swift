@@ -60,6 +60,16 @@ public enum GameConsts {
     public static let totalColors = 6
     /// `LAUNCH_POWER` — px/tick, magnitude of the launch velocity.
     public static let launchPower: Double = 18
+    /// Flight sub-steps per tick (spec 18, "faster bubble flight"). Not part
+    /// of the original — `GameEngine.tick()` runs the launched bubble's
+    /// single-step update this many times per tick on average (via an
+    /// accumulator, see `GameEngine.flightAccumulator`), so the flight covers
+    /// more ground per tick without the step itself ever changing size: each
+    /// sub-step is still exactly one `launchPower`-sized move with its own
+    /// full collision/bounce check. The step must stay `launchPower` and
+    /// must not grow — a bigger single step risks skipping straight past a
+    /// neighbour before `collisionDistance` can register a hit (tunnelling).
+    public static let flightStepsPerTick: Double = 1.5
     /// Fixed simulation tick, ms (see "Решённые развилки").
     public static let tickMs = 15
     /// `WIDTH` — logical canvas width, px (canvas height is layout-dependent,

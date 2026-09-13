@@ -99,6 +99,13 @@ public final class GameEngine {
     var timeToNewBubble: Int = 0
     /// Mirrors `BoardManager.markHangedTime`.
     var markHangedTime: Int = 0
+    /// Sub-step accumulator for `GameConsts.flightStepsPerTick` (spec 18):
+    /// accumulates `flightStepsPerTick` every tick, and `tick()` runs one
+    /// full `updateLaunchedBubble()` sub-step for every whole unit it can
+    /// consume, carrying the fractional remainder to the next tick. Reset to
+    /// 0 by `performLaunch` so every shot's cadence (1 step, then 2, then 1,
+    /// ...) starts identically regardless of how many idle ticks preceded it.
+    var flightAccumulator: Double = 0
 
     // MARK: - Init
 
@@ -192,15 +199,20 @@ public final class GameEngine {
     // MARK: - Simulation
 
     /// Advances exactly one 15ms tick. Order: advance time -> update the
-    /// launched bubble (flight/bounce/collision/snap/landing) -> game-over
-    /// check for every board bubble -> run all now-eligible `TimerQueue`
-    /// actions -> clear the cannon lockout once due -> win-check (own
-    /// interval) -> `.turnResolved` if the engine just became idle after a
-    /// shot.
+    /// launched bubble (flight/bounce/collision/snap/landing, one or more
+    /// `GameConsts.flightStepsPerTick`-driven sub-steps — spec 18) ->
+    /// game-over check for every board bubble -> run all now-eligible
+    /// `TimerQueue` actions -> clear the cannon lockout once due -> win-check
+    /// (own interval) -> `.turnResolved` if the engine just became idle after
+    /// a shot.
     public func tick() {
         timeMs += GameConsts.tickMs
 
-        updateLaunchedBubble()
+        flightAccumulator += GameConsts.flightStepsPerTick
+        while flightAccumulator >= 1 && launchedBubble != nil {
+            updateLaunchedBubble()
+            flightAccumulator -= 1
+        }
 
         for b in bubbles where b.state == .onBoard {
             checkGameOver(for: b)
