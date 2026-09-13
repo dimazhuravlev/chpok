@@ -28,7 +28,7 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: C3RGKVW548
+        DEVELOPMENT_TEAM: Z55ZV5538M
         "CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]": "NO"
         "CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]": "NO"
         "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": ""
@@ -49,7 +49,7 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: C3RGKVW548
+        DEVELOPMENT_TEAM: Z55ZV5538M
         "CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]": "NO"
         "CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]": "NO"
         "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": ""
