@@ -48,6 +48,15 @@ public final class GameEngine {
     /// Original convention: 0 = up, positive = right, range [-75, 75].
     public internal(set) var aimAngleDegrees: Double = 0
 
+    /// No launched bubble, nothing mid-removal, no pending one-shot
+    /// `TimerQueue` gameplay action, and no row-add in progress.
+    ///
+    /// Deliberately independent of the post-init/-reset `cannonEnabled`
+    /// lockout (§2/§15's 500ms `Cannon.cannonEnabled` delay): that lockout
+    /// gates `canFire` only, not idleness, so a snapshot can be taken (and
+    /// `.turnResolved` can fire) immediately after `init`/`resetBoard()` —
+    /// see `cannonEnableAtMs`, tracked outside `TimerQueue` for exactly this
+    /// reason.
     public var isIdle: Bool {
         launchedBubble == nil
             && !bubbles.contains(where: { $0.isBeingRemoved })
@@ -72,6 +81,11 @@ public final class GameEngine {
     /// drives the one-shot `.turnResolved` event.
     var turnInProgress: Bool = false
     var cannonEnabled: Bool = false
+    /// Absolute `timeMs` at which `cannonEnabled` flips true. Deliberately
+    /// not routed through `TimerQueue` (same reasoning as
+    /// `nextWinCheckAtMs`): this lockout must gate `canFire` only and never
+    /// make `isIdle`/`snapshot()` unreachable — see `isIdle`'s doc comment.
+    var cannonEnableAtMs: Int = 0
     /// Next absolute `timeMs` at which the win-check runs. Deliberately not
     /// routed through `TimerQueue` — see its doc comment.
     var nextWinCheckAtMs: Int = GameConsts.winCheckIntervalMs
@@ -173,8 +187,9 @@ public final class GameEngine {
     /// Advances exactly one 15ms tick. Order: advance time -> update the
     /// launched bubble (flight/bounce/collision/snap/landing) -> game-over
     /// check for every board bubble -> run all now-eligible `TimerQueue`
-    /// actions -> win-check (own interval) -> `.turnResolved` if the engine
-    /// just became idle after a shot.
+    /// actions -> clear the cannon lockout once due -> win-check (own
+    /// interval) -> `.turnResolved` if the engine just became idle after a
+    /// shot.
     public func tick() {
         timeMs += GameConsts.tickMs
 
@@ -185,6 +200,10 @@ public final class GameEngine {
         }
 
         timerQueue.fire(upToMs: timeMs)
+
+        if !cannonEnabled && timeMs >= cannonEnableAtMs {
+            cannonEnabled = true
+        }
 
         if timeMs >= nextWinCheckAtMs {
             checkWin()

@@ -47,19 +47,40 @@ final class EngineSmokeTests: XCTestCase {
     // (c)
     func testSnapshotRoundTrip() {
         let engine = GameEngine(random: SeededGameRandom(seed: 7))
-        engine.advance(ms: 510)
-
+        // No advance() needed: snapshot() must be available immediately
+        // (isIdle does not depend on the post-init cannon lockout — see
+        // testIdleAndSnapshotIgnoreCannonLockout).
         guard let snapshot = engine.snapshot() else {
             XCTFail("expected a non-nil snapshot while idle")
             return
         }
 
         let restored = GameEngine(snapshot: snapshot, random: SeededGameRandom(seed: 7))
-        // A freshly constructed engine also arms the 500ms cannon lockout
-        // (mirrors initBoard, see armCannonEnableLockout), which keeps it
-        // non-idle until cleared.
-        restored.advance(ms: 510)
         XCTAssertEqual(restored.snapshot(), snapshot)
+    }
+
+    /// `isIdle`/`snapshot()` must not depend on the post-init/-reset 500ms
+    /// `cannonEnabled` lockout — only `canFire` does. The UI saves a
+    /// snapshot right after Restart, so `snapshot()` must be available
+    /// immediately, not 500ms later.
+    func testIdleAndSnapshotIgnoreCannonLockout() {
+        let engine = GameEngine(random: SeededGameRandom(seed: 1))
+
+        XCTAssertTrue(engine.isIdle, "isIdle must be true right after init")
+        XCTAssertNotNil(engine.snapshot(), "snapshot() must be available right after init")
+        XCTAssertFalse(engine.canFire, "canFire must respect the cannon lockout right after init")
+
+        engine.resetBoard()
+
+        XCTAssertTrue(engine.isIdle, "isIdle must be true right after resetBoard()")
+        XCTAssertNotNil(engine.snapshot(), "snapshot() must be available right after resetBoard()")
+        XCTAssertFalse(engine.canFire, "canFire must respect the cannon lockout right after resetBoard()")
+
+        engine.advance(ms: 15)
+        XCTAssertFalse(engine.canFire, "canFire must still be false before the 500ms lockout elapses")
+
+        engine.advance(ms: 600)
+        XCTAssertTrue(engine.canFire, "canFire must become true once the 500ms lockout elapses")
     }
 
     // DoD #4 — constants

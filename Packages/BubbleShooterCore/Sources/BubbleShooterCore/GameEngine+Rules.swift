@@ -92,12 +92,13 @@ extension GameEngine {
     /// Mirrors `initBoard`'s `Cannon.cannonEnabled = false` +
     /// 500ms-later-true one-shot. Re-armed by `resetBoard()` too, matching
     /// the original (this runs unconditionally inside `initBoard`,
-    /// regardless of `addNewUI`).
+    /// regardless of `addNewUI`). Tracked via `cannonEnableAtMs`, checked
+    /// each `tick()`, rather than scheduled on `TimerQueue`: this lockout
+    /// must gate `canFire` only, never `isIdle`/`snapshot()` — a UI-level
+    /// Restart needs to be able to save a snapshot right away.
     func armCannonEnableLockout() {
         cannonEnabled = false
-        timerQueue.schedule(afterMs: GameEngine.cannonEnableDelayMs, from: timeMs) { [weak self] in
-            self?.cannonEnabled = true
-        }
+        cannonEnableAtMs = timeMs + GameEngine.cannonEnableDelayMs
     }
 
     // MARK: - §4 launch
