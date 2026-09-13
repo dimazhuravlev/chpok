@@ -4,14 +4,16 @@ import BubbleShooterCore
 /// Flat, minimalist color palette for the whole app (see spec "Минимализм").
 /// All values are the exact hex constants from the spec context.
 enum Palette {
+    /// Case names below (e.g. `lightblue`) are legacy slot identifiers kept for save
+    /// compatibility via `rawValue`; the actual displayed color is defined here.
     static func color(for bubbleColor: BubbleColor) -> UIColor {
         switch bubbleColor {
-        case .blue: return UIColor(hex: 0x3B7DFF)
-        case .red: return UIColor(hex: 0xF0443C)
-        case .green: return UIColor(hex: 0x3CC45A)
-        case .yellow: return UIColor(hex: 0xFFD338)
-        case .purple: return UIColor(hex: 0xA45DE8)
-        case .lightblue: return UIColor(hex: 0x63D2F5)
+        case .blue: return UIColor(hex: 0x22BDFF)
+        case .red: return UIColor(hex: 0xFF4D66)
+        case .green: return UIColor(hex: 0x87BD00)
+        case .yellow: return UIColor(hex: 0xFFB847)
+        case .purple: return UIColor(hex: 0xB554FF)
+        case .lightblue: return UIColor(hex: 0xB36321)
         }
     }
 
