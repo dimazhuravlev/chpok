@@ -1,0 +1,62 @@
+name: BubbleShooter
+options:
+  bundleIdPrefix: com.dimazhuravlev
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  BubbleShooterCore:
+    path: Packages/BubbleShooterCore
+
+targets:
+  BubbleShooter:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: BubbleShooterCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dimazhuravlev.BubbleShooter
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Bubble Shooter
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+
+  BubbleShooterUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: BubbleShooter
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        TEST_TARGET_NAME: BubbleShooter
+
+schemes:
+  BubbleShooter:
+    build:
+      targets:
+        BubbleShooter: all
+        BubbleShooterUITests: test
+    test:
+      config: Debug
+      targets:
+        - BubbleShooterUITests
