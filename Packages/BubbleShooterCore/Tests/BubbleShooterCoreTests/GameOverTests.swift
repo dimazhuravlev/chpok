@@ -10,12 +10,13 @@ final class GameOverTests: XCTestCase {
         (0...16).map { .init(boardX: $0, boardY: 0, color: colors($0)) }
     }
 
-    // (a) a bubble past the original layout's threshold (row 14 / y 470)
+    // (a) a bubble past the original layout's threshold (row 16 / y ≈465.4,
+    // per GameConsts.rowHeight — see LayoutTests.testOriginalLayout)
     // triggers a loss on the very next tick, no shot required, and locks
     // out every player action.
     func testBubblePastThresholdTriggersLoss() {
         var board = rowZero()
-        board.append(.init(boardX: 8, boardY: 15, color: .red))
+        board.append(.init(boardX: 8, boardY: 17, color: .red))
         let engine = GameEngine(board: board, readyColor: .blue, queueColor: .red, random: SeededGameRandom(seed: 1))
 
         XCTAssertFalse(engine.isGameOver)
@@ -30,30 +31,30 @@ final class GameOverTests: XCTestCase {
         XCTAssertFalse(engine.fire(angleDegrees: 0))
     }
 
-    // (b) GameLayout.fitting(canvasHeight: 1000): gameOverRow=26/gameOverY=854
-    // (LayoutTests). Row 26 itself is still in play (boardY > 26 is the
-    // condition, not >=); row 27 is past it.
+    // (b) GameLayout.fitting(canvasHeight: 1000): gameOverRow=30/gameOverY≈853.38
+    // (LayoutTests, per GameConsts.rowHeight). Row 30 itself is still in play
+    // (boardY > 30 is the condition, not >=); row 31 is past it.
     func testFittingLayoutThreshold() {
         let layout = GameLayout.fitting(canvasHeight: 1000)
 
-        var boardAtRow26 = rowZero()
-        boardAtRow26.append(.init(boardX: 8, boardY: 26, color: .red))
-        let stillPlaying = GameEngine(board: boardAtRow26, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
+        var boardAtRow30 = rowZero()
+        boardAtRow30.append(.init(boardX: 8, boardY: 30, color: .red))
+        let stillPlaying = GameEngine(board: boardAtRow30, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
         stillPlaying.tick()
-        XCTAssertFalse(stillPlaying.isGameOver, "row 26 must still be in play")
+        XCTAssertFalse(stillPlaying.isGameOver, "row 30 must still be in play")
 
-        var boardAtRow27 = rowZero()
-        boardAtRow27.append(.init(boardX: 8, boardY: 27, color: .red))
-        let over = GameEngine(board: boardAtRow27, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
+        var boardAtRow31 = rowZero()
+        boardAtRow31.append(.init(boardX: 8, boardY: 31, color: .red))
+        let over = GameEngine(board: boardAtRow31, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
         over.tick()
-        XCTAssertTrue(over.isGameOver, "row 27 must be past the threshold")
+        XCTAssertTrue(over.isGameOver, "row 31 must be past the threshold")
         XCTAssertTrue(over.drainEvents().contains(.gameOver(won: false, score: 0, bonus: 0)))
     }
 
     // (c) resetBoard() after a loss fully restores a fresh game.
     func testResetBoardAfterGameOver() {
         var board = rowZero()
-        board.append(.init(boardX: 8, boardY: 15, color: .red))
+        board.append(.init(boardX: 8, boardY: 17, color: .red))
         let engine = GameEngine(board: board, readyColor: .blue, queueColor: .red, score: 42, random: SeededGameRandom(seed: 1))
         engine.tick()
         XCTAssertTrue(engine.isGameOver)

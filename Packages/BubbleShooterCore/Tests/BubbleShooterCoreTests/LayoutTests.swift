@@ -13,8 +13,12 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(layout.cannonPivot, Vec2(x: 296, y: 552))
         XCTAssertEqual(layout.readyPosition, Vec2(x: 296, y: 552))
         XCTAssertEqual(layout.queuePosition, Vec2(x: 40, y: 552))
-        XCTAssertEqual(layout.gameOverRow, 14)
-        XCTAssertEqual(layout.gameOverY, 470)
+        // Spec 11: gameOverRow/gameOverY now derive from GameConsts.rowHeight
+        // (true hex packing), not bubbleSize — more, shorter rows fit in the
+        // same pixel span, so gameOverRow grew from the original's 14 while
+        // gameOverY (pixels) stayed close to the original's 470.
+        XCTAssertEqual(layout.gameOverRow, 16)
+        XCTAssertEqual(layout.gameOverY, 465.40500673763257, accuracy: 1e-9)
     }
 
     func testOriginalContainsInputPoint() {
@@ -30,7 +34,7 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(layout.canvasHeight, 1000)
         XCTAssertEqual(layout.cannonY, 952)
         XCTAssertEqual(layout.inputAreaMaxY, 888)
-        XCTAssertEqual(layout.gameOverRow, 26)
-        XCTAssertEqual(layout.gameOverY, 854)
+        XCTAssertEqual(layout.gameOverRow, 30)
+        XCTAssertEqual(layout.gameOverY, 853.38438763327, accuracy: 1e-9)
     }
 }

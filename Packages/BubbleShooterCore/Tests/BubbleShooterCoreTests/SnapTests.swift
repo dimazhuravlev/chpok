@@ -3,9 +3,8 @@ import XCTest
 
 /// Snap invariants (game-logic.md §6/§7) across a series of shots on the
 /// full starting board: no two board bubbles ever share a cell, no bubble
-/// ends up above row 0, and (almost always — see the tolerance note below)
-/// every bubble that lands is either adjacent to an existing board bubble or
-/// itself in row 0.
+/// ends up above row 0, and every bubble that lands is either adjacent to an
+/// existing board bubble or itself in row 0.
 final class SnapTests: XCTestCase {
 
     func testThirtyShotsPreserveGridInvariants() {
@@ -59,19 +58,26 @@ final class SnapTests: XCTestCase {
         // `assignStateDefaultCoords` (game-logic.md §6) snaps to the grid
         // cell nearest the bubble's post-collision *pixel* anchor — it does
         // not search for a cell actually touching the bubble it collided
-        // with. For a grazing collision (distance just under the 24px
-        // threshold), rounding that anchor to the nearest row/column can
-        // land on a cell that is not a grid-neighbour of anything already
-        // on the board, even though a real collision occurred. This is a
-        // provable, faithfully-ported consequence of the original's exact
-        // formula (verified by hand against this run: shot 10 lands at
-        // (0,11); its sole collision partner at (2,10) is ~57.7px away in
-        // Grid.realCoord terms, not one of (0,11)'s six neighbour cells —
-        // not a porting bug). One such violation is expected for this
-        // scripted seed-3/angle-cycle run; a jump beyond that would point
-        // at a real regression.
-        XCTAssertLessThanOrEqual(
-            adjacencyViolations.count, 1,
+        // with. Before spec 11 (true hexagonal packing, `GameConsts.rowHeight`),
+        // that pixel-nearest snap and `Grid.areNeighbours`'s board-coordinate
+        // adjacency check could disagree: the old grid used `rowHeight ==
+        // bubbleSize`, so a diagonal step in board coordinates covered
+        // ~35.78px in real pixels instead of exactly `bubbleSize` — enough
+        // slack that a grazing collision (this scripted seed-3/angle-cycle
+        // run's shot 10) could round to a cell that wasn't actually a
+        // neighbour of anything on the board, even though a real collision
+        // occurred. A ≤1-violation tolerance used to guard this exact,
+        // provable (not a bug) edge case.
+        //
+        // Under true hex packing, pixel-nearest and board-adjacent agree —
+        // every one of a cell's six board-neighbours now sits at exactly
+        // `bubbleSize` in real coordinates (see
+        // `GridTests.testAllSixNeighboursAreExactlyOneDiameterApart`) — and
+        // this run (including former shot 10) now lands adjacent every
+        // time, so the tolerance is tightened to zero. A violation here
+        // would point at a real regression.
+        XCTAssertEqual(
+            adjacencyViolations.count, 0,
             "unexpectedly many non-adjacent, non-row-0 landings: \(adjacencyViolations)"
         )
     }

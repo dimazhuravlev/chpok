@@ -12,6 +12,15 @@ public enum GameConsts {
     public static let boardHeight = 9
     /// `BUBBLE_SIZE` — px, bubble diameter / grid step.
     public static let bubbleSize: Double = 32
+    /// Vertical distance between adjacent rows for a true hexagonal
+    /// (close) packing: `bubbleSize * sqrt(3) / 2`. Combined with the
+    /// unchanged horizontal step (`bubbleSize`) and odd-row half-step
+    /// offset, this places all six neighbours of any cell at exactly
+    /// `bubbleSize` from its center — including the four diagonal
+    /// neighbours, which a naive `rowHeight == bubbleSize` grid would push
+    /// out to `sqrt((bubbleSize/2)^2 + bubbleSize^2) ≈ 35.78`, leaving
+    /// visible gaps between rows.
+    public static let rowHeight: Double = bubbleSize * (3.0.squareRoot() / 2)
     /// `INITIAL_X_COORD` — px, grid origin X.
     public static let initialX: Double = 40
     /// `INITIAL_Y_COORD` — px, grid origin Y.

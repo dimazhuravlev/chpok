@@ -100,10 +100,12 @@ final class EngineSmokeTests: XCTestCase {
         let fitting = GameLayout.fitting(canvasHeight: 1000)
         XCTAssertEqual(fitting.cannonY, 952)
         XCTAssertEqual(fitting.inputAreaMaxY, 888)
-        XCTAssertEqual(fitting.gameOverRow, 26)
-        XCTAssertEqual(fitting.gameOverY, 854)
+        XCTAssertEqual(fitting.gameOverRow, 30)
+        XCTAssertEqual(fitting.gameOverY, 853.38438763327, accuracy: 1e-9)
 
-        XCTAssertEqual(GameLayout.original.gameOverRow, 14)
-        XCTAssertEqual(GameLayout.original.gameOverY, 470)
+        // Spec 11: gameOverRow/gameOverY derive from GameConsts.rowHeight
+        // (true hex packing) — see LayoutTests.testOriginalLayout.
+        XCTAssertEqual(GameLayout.original.gameOverRow, 16)
+        XCTAssertEqual(GameLayout.original.gameOverY, 465.40500673763257, accuracy: 1e-9)
     }
 }

@@ -57,16 +57,21 @@ public struct GameLayout: Equatable {
     }
 
     /// Row threshold for the loss condition (`boardCoordY > gameOverRow`).
-    /// Derived so that `GameLayout.original.gameOverRow == 14`, matching the
-    /// original's hardcoded `boardCoordY > 14`.
+    /// Uses `GameConsts.rowHeight`, not `bubbleSize`, so the threshold
+    /// tracks the true hex-packing row pitch (see `GameConsts.rowHeight`):
+    /// `GameLayout.original.gameOverRow == 16` (more rows now fit in the
+    /// same pixel span than the original's hardcoded `boardCoordY > 14`,
+    /// since rows are packed tighter).
     public var gameOverRow: Int {
-        Int(floor((cannonY - 104) / GameConsts.bubbleSize))
+        Int(floor((cannonY - 104) / GameConsts.rowHeight))
     }
 
     /// Pixel-Y threshold for the loss condition (`imgSprite.y > gameOverY`).
-    /// Derived so that `GameLayout.original.gameOverY == 470`, matching the
-    /// original's hardcoded `imgSprite.y > 470`.
+    /// Uses `GameConsts.rowHeight` so this stays approximately the original
+    /// pixel height (`GameLayout.original.gameOverY ≈ 465.4`, close to the
+    /// original's hardcoded `imgSprite.y > 470`) even though `gameOverRow`
+    /// itself grew.
     public var gameOverY: Double {
-        GameConsts.initialY + GameConsts.bubbleSize * Double(gameOverRow) - 18
+        GameConsts.initialY + GameConsts.rowHeight * Double(gameOverRow) - 18
     }
 }

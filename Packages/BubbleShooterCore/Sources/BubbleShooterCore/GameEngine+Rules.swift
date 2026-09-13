@@ -224,6 +224,12 @@ extension GameEngine {
     /// (not a full clamp) and a hard clamp to 0 if negative; `boardY` is
     /// never clamped — both exactly as the original (game-logic.md §6,
     /// §17.9).
+    ///
+    /// Deviation from the original (by decision — see `GameConsts.rowHeight`):
+    /// the row snap divides by `GameConsts.rowHeight`, not `bubbleSize`, to
+    /// match `Grid.realCoord`'s true hex-packing row pitch. The rollback
+    /// step (`0.25*counter*v`) and the horizontal snap (`bx`, parity shift,
+    /// `0.9999` fudge factor) are unchanged — those stay in `bubbleSize`.
     func assignStateDefaultCoords(_ bubble: Bubble, anchor: Vec2) {
         var counter = 0
         var occupied: Bool
@@ -236,7 +242,7 @@ extension GameEngine {
             bx -= GameConsts.initialX
             by -= GameConsts.initialY
 
-            let boardY = jsRound(by / GameConsts.bubbleSize)
+            let boardY = jsRound(by / GameConsts.rowHeight)
             bx -= Double(boardY % 2) * GameConsts.bubbleSize * 0.5
             var boardX = jsRound(bx * 0.9999 / GameConsts.bubbleSize)
 

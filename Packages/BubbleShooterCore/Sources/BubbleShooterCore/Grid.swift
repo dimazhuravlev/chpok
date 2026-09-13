@@ -10,18 +10,24 @@ import Foundation
 /// must additionally exclude the bubble itself (see
 /// `GameEngine.neighbours(of:)`).
 public enum Grid {
-    /// Mirrors `boardCoordToRealCoord(x, y)`. Odd rows are shifted
+    /// Ported from `boardCoordToRealCoord(x, y)`. Odd rows are shifted
     /// `+BUBBLE_SIZE*0.5` right of even rows. `boardY % 2` is used as-is
     /// (matching the original's `Math.floor(y % 2)`, a no-op for integer
     /// `y`): for a negative `boardY`, this yields a negative offset exactly
     /// as the original would, rather than a "corrected" 0/1 parity — the
     /// original has no protection against negative `boardCoordY` (§6, §17.9)
     /// and this is not the place to add one.
+    ///
+    /// Deviation from the original (no longer a 1:1 mirror, by decision —
+    /// see `GameConsts.rowHeight`): the row step is `GameConsts.rowHeight`,
+    /// not `GameConsts.bubbleSize`, so this is a true hexagonal packing —
+    /// all six neighbours of a cell sit exactly `bubbleSize` from its
+    /// center. The X formula is unchanged.
     public static func realCoord(boardX: Int, boardY: Int) -> Vec2 {
         let x = GameConsts.initialX
             + Double(boardX) * GameConsts.bubbleSize
             + Double(boardY % 2) * GameConsts.bubbleSize * 0.5
-        let y = GameConsts.initialY + Double(boardY) * GameConsts.bubbleSize
+        let y = GameConsts.initialY + Double(boardY) * GameConsts.rowHeight
         return Vec2(x: x, y: y)
     }
 

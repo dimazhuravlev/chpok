@@ -8,12 +8,57 @@ final class GridTests: XCTestCase {
 
     // MARK: - realCoord
 
+    /// Row step is `GameConsts.rowHeight` (16√3 ≈ 27.712812921102035), not
+    /// `bubbleSize` (32) — true hex packing, see `GameConsts.rowHeight`.
+    /// Y values are irrational, so these compare with a tight `accuracy`
+    /// rather than exact `Vec2` equality.
     func testRealCoordKnownPoints() {
-        XCTAssertEqual(Grid.realCoord(boardX: 0, boardY: 0), Vec2(x: 40, y: 40))
-        XCTAssertEqual(Grid.realCoord(boardX: 1, boardY: 0), Vec2(x: 72, y: 40))
-        XCTAssertEqual(Grid.realCoord(boardX: 0, boardY: 1), Vec2(x: 56, y: 72))
-        XCTAssertEqual(Grid.realCoord(boardX: 16, boardY: 8), Vec2(x: 552, y: 296))
-        XCTAssertEqual(Grid.realCoord(boardX: 16, boardY: 9), Vec2(x: 568, y: 328))
+        let p00 = Grid.realCoord(boardX: 0, boardY: 0)
+        XCTAssertEqual(p00.x, 40, accuracy: 1e-9)
+        XCTAssertEqual(p00.y, 40, accuracy: 1e-9)
+
+        let p10 = Grid.realCoord(boardX: 1, boardY: 0)
+        XCTAssertEqual(p10.x, 72, accuracy: 1e-9)
+        XCTAssertEqual(p10.y, 40, accuracy: 1e-9)
+
+        let p01 = Grid.realCoord(boardX: 0, boardY: 1)
+        XCTAssertEqual(p01.x, 56, accuracy: 1e-9)
+        XCTAssertEqual(p01.y, 67.712812921102035, accuracy: 1e-9)
+
+        let p168 = Grid.realCoord(boardX: 16, boardY: 8)
+        XCTAssertEqual(p168.x, 552, accuracy: 1e-9)
+        XCTAssertEqual(p168.y, 261.70250336881628, accuracy: 1e-9)
+
+        let p169 = Grid.realCoord(boardX: 16, boardY: 9)
+        XCTAssertEqual(p169.x, 568, accuracy: 1e-9)
+        XCTAssertEqual(p169.y, 289.41531628991831, accuracy: 1e-9)
+    }
+
+    /// Spec 11: every one of a cell's six tabulated neighbours (both row
+    /// parities) sits exactly `bubbleSize` away in real coordinates — the
+    /// defining property of a true hexagonal (close) packing. Sampled at a
+    /// few interior rows/columns so both even and odd parity are covered.
+    func testAllSixNeighboursAreExactlyOneDiameterApart() {
+        for row in [4, 5] {
+            for col in 3...6 {
+                let origin = Grid.realCoord(boardX: col, boardY: row)
+                for offset in Grid.neighbourOffsets(forRow: row) {
+                    let neighbour = Grid.realCoord(boardX: col + offset.dx, boardY: row + offset.dy)
+                    XCTAssertEqual(
+                        origin.distance(to: neighbour), GameConsts.bubbleSize, accuracy: 1e-9,
+                        "(\(col),\(row)) + offset (\(offset.dx),\(offset.dy)) should be exactly bubbleSize apart"
+                    )
+                }
+            }
+        }
+    }
+
+    /// Spec 11: `rowHeight` is the height of a row of a true hexagonal
+    /// packing (`bubbleSize * sqrt(3)/2`) and, being the short leg of that
+    /// packing, is strictly less than the bubble diameter itself.
+    func testRowHeightIsHexPacking() {
+        XCTAssertEqual(GameConsts.rowHeight, 32 * (3.0.squareRoot() / 2), accuracy: 1e-12)
+        XCTAssertLessThan(GameConsts.rowHeight, GameConsts.bubbleSize)
     }
 
     // MARK: - neighbourOffsets: full even/odd table (§3)
