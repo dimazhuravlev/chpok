@@ -44,15 +44,10 @@ final class GameScene: SKScene {
     }
 
     private func setUpCannon() {
-        let barrel = SKShapeNode(rect: CGRect(x: -7, y: 0, width: 14, height: 44), cornerRadius: 5)
-        barrel.fillColor = Palette.cannon
-        barrel.strokeColor = .clear
-
         let base = SKShapeNode(circleOfRadius: 10)
         base.fillColor = Palette.cannon
         base.strokeColor = .clear
 
-        cannonNode.addChild(barrel)
         cannonNode.addChild(base)
         cannonNode.position = geometry.scenePoint(engine.layout.cannonPivot)
         cannonNode.zPosition = 5
