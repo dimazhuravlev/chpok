@@ -31,23 +31,23 @@ final class GameOverTests: XCTestCase {
         XCTAssertFalse(engine.fire(angleDegrees: 0))
     }
 
-    // (b) GameLayout.fitting(canvasHeight: 1000): gameOverRow=30/gameOverY≈853.38
-    // (LayoutTests, per GameConsts.rowHeight). Row 30 itself is still in play
-    // (boardY > 30 is the condition, not >=); row 31 is past it.
+    // (b) GameLayout.fitting(canvasHeight: 1000): gameOverRow=29/gameOverY≈825.67
+    // (LayoutTests, per GameConsts.rowHeight). Row 29 itself is still in play
+    // (boardY > 29 is the condition, not >=); row 30 is past it.
     func testFittingLayoutThreshold() {
         let layout = GameLayout.fitting(canvasHeight: 1000)
 
+        var boardAtRow29 = rowZero()
+        boardAtRow29.append(.init(boardX: 8, boardY: 29, color: .red))
+        let stillPlaying = GameEngine(board: boardAtRow29, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
+        stillPlaying.tick()
+        XCTAssertFalse(stillPlaying.isGameOver, "row 29 must still be in play")
+
         var boardAtRow30 = rowZero()
         boardAtRow30.append(.init(boardX: 8, boardY: 30, color: .red))
-        let stillPlaying = GameEngine(board: boardAtRow30, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
-        stillPlaying.tick()
-        XCTAssertFalse(stillPlaying.isGameOver, "row 30 must still be in play")
-
-        var boardAtRow31 = rowZero()
-        boardAtRow31.append(.init(boardX: 8, boardY: 31, color: .red))
-        let over = GameEngine(board: boardAtRow31, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
+        let over = GameEngine(board: boardAtRow30, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
         over.tick()
-        XCTAssertTrue(over.isGameOver, "row 31 must be past the threshold")
+        XCTAssertTrue(over.isGameOver, "row 30 must be past the threshold")
         XCTAssertTrue(over.drainEvents().contains(.gameOver(won: false, score: 0, bonus: 0)))
     }
 

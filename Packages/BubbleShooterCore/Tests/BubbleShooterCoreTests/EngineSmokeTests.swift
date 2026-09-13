@@ -106,10 +106,10 @@ final class EngineSmokeTests: XCTestCase {
         XCTAssertEqual(GameLayout.original.cannonPivot, Vec2(x: 296, y: 552))
 
         let fitting = GameLayout.fitting(canvasHeight: 1000)
-        XCTAssertEqual(fitting.cannonY, 952)
-        XCTAssertEqual(fitting.inputAreaMaxY, 888)
-        XCTAssertEqual(fitting.gameOverRow, 30)
-        XCTAssertEqual(fitting.gameOverY, 853.38438763327, accuracy: 1e-9)
+        XCTAssertEqual(fitting.cannonY, 920)
+        XCTAssertEqual(fitting.inputAreaMaxY, 856)
+        XCTAssertEqual(fitting.gameOverRow, 29)
+        XCTAssertEqual(fitting.gameOverY, 825.6715747119590, accuracy: 1e-9)
 
         // Spec 11: gameOverRow/gameOverY derive from GameConsts.rowHeight
         // (true hex packing) — see LayoutTests.testOriginalLayout.

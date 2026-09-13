@@ -32,9 +32,9 @@ final class LayoutTests: XCTestCase {
     func testFittingLayout() {
         let layout = GameLayout.fitting(canvasHeight: 1000)
         XCTAssertEqual(layout.canvasHeight, 1000)
-        XCTAssertEqual(layout.cannonY, 952)
-        XCTAssertEqual(layout.inputAreaMaxY, 888)
-        XCTAssertEqual(layout.gameOverRow, 30)
-        XCTAssertEqual(layout.gameOverY, 853.38438763327, accuracy: 1e-9)
+        XCTAssertEqual(layout.cannonY, 920)
+        XCTAssertEqual(layout.inputAreaMaxY, 856)
+        XCTAssertEqual(layout.gameOverRow, 29)
+        XCTAssertEqual(layout.gameOverY, 825.6715747119590, accuracy: 1e-9)
     }
 }

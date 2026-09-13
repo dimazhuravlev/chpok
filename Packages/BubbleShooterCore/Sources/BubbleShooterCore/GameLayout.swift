@@ -28,12 +28,21 @@ public struct GameLayout: Equatable {
     /// Reproduces the original's fixed 800x600 canvas exactly.
     public static let original = GameLayout(canvasHeight: 600, cannonY: 552, inputAreaMaxY: 505)
 
-    /// Derives a layout for an arbitrary canvas height, keeping the cannon a
-    /// fixed distance from the bottom edge and the input area a fixed
-    /// distance above the cannon.
+    /// Cannon's fixed distance from the canvas bottom edge in
+    /// `fitting(canvasHeight:)`, in logical px — one bubble diameter (32)
+    /// more than the original hardcoded 48, raising the whole cannon block
+    /// (spec 16).
+    private static let cannonBottomInset: Double = 80
+    /// Input area's fixed distance above the cannon in
+    /// `fitting(canvasHeight:)`, in logical px.
+    private static let inputAreaBottomGap: Double = 64
+
+    /// Derives a layout for an arbitrary canvas height: the cannon sits
+    /// `cannonBottomInset` above the bottom edge, and the input area's
+    /// bottom edge sits `inputAreaBottomGap` above the cannon.
     public static func fitting(canvasHeight: Double) -> GameLayout {
-        let cannonY = canvasHeight - 48
-        let inputAreaMaxY = cannonY - 64
+        let cannonY = canvasHeight - cannonBottomInset
+        let inputAreaMaxY = cannonY - inputAreaBottomGap
         return GameLayout(canvasHeight: canvasHeight, cannonY: cannonY, inputAreaMaxY: inputAreaMaxY)
     }
 
