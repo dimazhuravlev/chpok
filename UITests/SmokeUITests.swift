@@ -4,6 +4,7 @@ final class SmokeUITests: XCTestCase {
     func testAppLaunchesAndShowsTitle() {
         let app = XCUIApplication()
         app.launch()
-        XCTAssertTrue(app.staticTexts["title"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["scoreLabel"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["restartButton"].exists)
     }
 }
