@@ -23,8 +23,9 @@ final class GameOverTests: XCTestCase {
         engine.tick()
 
         XCTAssertTrue(engine.isGameOver)
+        let elapsed = engine.matchElapsedMs
         let events = engine.drainEvents()
-        XCTAssertTrue(events.contains(.gameOver(won: false, score: 0, bonus: 0)), "\(events)")
+        XCTAssertTrue(events.contains(.gameOver(won: false, score: 0, bonus: 0, elapsedMs: elapsed)), "\(events)")
 
         XCTAssertFalse(engine.canFire)
         XCTAssertNil(engine.snapshot())
@@ -48,7 +49,8 @@ final class GameOverTests: XCTestCase {
         let over = GameEngine(board: boardAtRow30, readyColor: .blue, queueColor: .red, layout: layout, random: SeededGameRandom(seed: 1))
         over.tick()
         XCTAssertTrue(over.isGameOver, "row 30 must be past the threshold")
-        XCTAssertTrue(over.drainEvents().contains(.gameOver(won: false, score: 0, bonus: 0)))
+        let elapsed = over.matchElapsedMs
+        XCTAssertTrue(over.drainEvents().contains(.gameOver(won: false, score: 0, bonus: 0, elapsedMs: elapsed)))
     }
 
     // (c) resetBoard() after a loss fully restores a fresh game.

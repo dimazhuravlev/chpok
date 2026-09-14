@@ -27,7 +27,9 @@ public enum GameEvent: Equatable {
     /// `GameEngine.isIdle`).
     case turnResolved
     /// `bonus == score` on a win, `0` on a loss, mirroring the original's
-    /// `GameOver` popup.
-    case gameOver(won: Bool, score: Int, bonus: Int)
+    /// `GameOver` popup. `elapsedMs` is `GameEngine.matchElapsedMs` at the
+    /// moment the match ended (spec 22) — fixed here rather than read later
+    /// so it doesn't keep growing while the game-over popup is open.
+    case gameOver(won: Bool, score: Int, bonus: Int, elapsedMs: Int)
     case boardReset
 }

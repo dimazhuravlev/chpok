@@ -30,6 +30,10 @@ public struct GameSnapshot: Codable, Equatable {
     /// rather than silently guessing a parity is the correct behaviour —
     /// see `GameSaveStore.load()`.
     public var rowParity: Int
+    /// Spec 22: `GameEngine.matchElapsedMs` at the time of the snapshot —
+    /// active match time (foreground-only), restored so it keeps growing
+    /// from this value rather than resetting on resume.
+    public var elapsedMs: Int
 
     public init(
         bubbles: [BubbleRecord],
@@ -39,7 +43,8 @@ public struct GameSnapshot: Codable, Equatable {
         livesLeft: Int,
         maxLives: Int,
         totalColors: Int,
-        rowParity: Int = 0
+        rowParity: Int = 0,
+        elapsedMs: Int = 0
     ) {
         self.bubbles = bubbles
         self.readyColor = readyColor
@@ -49,5 +54,6 @@ public struct GameSnapshot: Codable, Equatable {
         self.maxLives = maxLives
         self.totalColors = totalColors
         self.rowParity = rowParity
+        self.elapsedMs = elapsedMs
     }
 }

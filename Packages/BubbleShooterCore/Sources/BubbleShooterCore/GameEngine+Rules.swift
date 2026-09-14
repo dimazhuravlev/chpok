@@ -572,7 +572,7 @@ extension GameEngine {
     func triggerLoss() {
         guard !isGameOver else { return }
         isGameOver = true
-        events.append(.gameOver(won: false, score: score, bonus: 0))
+        events.append(.gameOver(won: false, score: score, bonus: 0, elapsedMs: matchElapsedMs))
     }
 
     /// Mirrors `MainUI.gameWonCheck`/`checkIfGameWon` (board empty of
@@ -581,7 +581,7 @@ extension GameEngine {
         guard !isGameOver else { return }
         if !bubbles.contains(where: { $0.state == .onBoard }) {
             isGameOver = true
-            events.append(.gameOver(won: true, score: score, bonus: score))
+            events.append(.gameOver(won: true, score: score, bonus: score, elapsedMs: matchElapsedMs))
         }
     }
 

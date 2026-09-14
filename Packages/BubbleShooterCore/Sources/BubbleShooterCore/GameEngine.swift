@@ -45,6 +45,18 @@ public final class GameEngine {
     /// Mirrors `Cannon.addNewRowInProgress`.
     public internal(set) var isAddingRow: Bool = false
     public internal(set) var timeMs: Int = 0
+    /// Absolute `timeMs` the current match's clock counts from (spec 22):
+    /// `matchElapsedMs` is `timeMs - matchStartMs`. Reset to the current
+    /// `timeMs` by `resetBoard()` so a new match starts at zero; offset to a
+    /// negative value by `init(snapshot:)` so a resumed match's elapsed time
+    /// starts at the snapshot's saved value and keeps growing from there.
+    var matchStartMs: Int = 0
+    /// Active time spent in the current match. `timeMs` only ever advances
+    /// while the app is in the foreground (ticks are driven by the scene's
+    /// accumulator, which drops elapsed time across a >0.5s gap — see
+    /// game-logic.md and the scene's `update(_:)`), so it doubles as the
+    /// "active time" spec 22 calls for without a separate stopwatch.
+    public var matchElapsedMs: Int { timeMs - matchStartMs }
     /// Original convention: 0 = up, positive = right, range [-75, 75].
     public internal(set) var aimAngleDegrees: Double = 0
     /// Spec 13: 0 or 1, flips every time a row is added (`addOneRow`).
@@ -128,6 +140,10 @@ public final class GameEngine {
         self.rowParity = snapshot.rowParity
         loadBoard(snapshot.bubbles, readyColor: snapshot.readyColor, queueColor: snapshot.queueColor)
         armCannonEnableLockout()
+        // timeMs starts at 0 for every engine (never itself persisted), so
+        // offsetting matchStartMs negative makes matchElapsedMs equal
+        // snapshot.elapsedMs right away and keep growing from there.
+        matchStartMs = -snapshot.elapsedMs
     }
 
     /// Builds an arbitrary board — for tests.
@@ -282,6 +298,8 @@ public final class GameEngine {
         // non-zero parity and silently produce a different (148-bubble)
         // wide/narrow split.
         rowParity = 0
+        // Spec 22: a new match's clock starts at zero.
+        matchStartMs = timeMs
 
         buildFullRandomBoardAndQueue()
         armCannonEnableLockout()
@@ -301,7 +319,8 @@ public final class GameEngine {
             livesLeft: livesLeft,
             maxLives: maxLives,
             totalColors: totalColors,
-            rowParity: rowParity
+            rowParity: rowParity,
+            elapsedMs: matchElapsedMs
         )
     }
 }

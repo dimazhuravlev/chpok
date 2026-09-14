@@ -31,6 +31,7 @@ final class HangingTests: XCTestCase {
         }
         XCTAssertTrue(engine.isGameOver, "expected the win to be detected within \(ticks) ticks")
 
+        let elapsed = engine.matchElapsedMs
         let events = engine.drainEvents()
 
         let removedEvents = events.filter { if case .removed = $0 { return true }; return false }
@@ -63,7 +64,7 @@ final class HangingTests: XCTestCase {
             XCTFail("expected a .gameOver event")
             return
         }
-        XCTAssertEqual(events[gameOverIndex], .gameOver(won: true, score: 130, bonus: 130))
+        XCTAssertEqual(events[gameOverIndex], .gameOver(won: true, score: 130, bonus: 130, elapsedMs: elapsed))
 
         // All .removed events must precede .gameOver (game-logic.md §13: the
         // board empties out synchronously inside the last remove() call,
