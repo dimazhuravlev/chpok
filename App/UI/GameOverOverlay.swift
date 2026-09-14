@@ -21,6 +21,9 @@ struct GameOverOverlay: View {
                 Text("Total: \(info.total)")
                     .font(.pretendardSemiBold(17))
                     .accessibilityIdentifier("gameOverTotal")
+                Text("Time: \(info.timeText)")
+                    .font(.pretendardSemiBold(17))
+                    .accessibilityIdentifier("gameOverTime")
                 Button("OK") { onOK() }
                     .font(.pretendardSemiBold(17))
                     .buttonStyle(.borderedProminent)

@@ -58,7 +58,7 @@ final class GameScene: SKScene {
     private var hasQueueBubbleAppeared = false
 
     var onScoreChanged: ((Int) -> Void)?
-    var onGameOver: ((Bool, Int, Int) -> Void)?
+    var onGameOver: ((Bool, Int, Int, Int) -> Void)?
     var onTurnResolved: (() -> Void)?
     var onBoardReset: (() -> Void)?
     var onLivesChanged: ((Int, Int) -> Void)?
@@ -248,8 +248,8 @@ final class GameScene: SKScene {
                 animateRemoval(id: id, reason: reason)
             case let .scoreChanged(score):
                 onScoreChanged?(score)
-            case let .gameOver(won, score, bonus):
-                onGameOver?(won, score, bonus)
+            case let .gameOver(won, score, bonus, elapsedMs):
+                onGameOver?(won, score, bonus, elapsedMs)
             case .boardReset:
                 performBoardReset()
             case let .lifeLost(livesLeft):

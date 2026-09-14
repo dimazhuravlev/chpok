@@ -6,9 +6,26 @@ struct GameOverInfo: Equatable {
     let won: Bool
     let score: Int
     let bonus: Int
+    /// `GameEngine.matchElapsedMs` fixed at the moment the match ended (spec
+    /// 22) — active (foreground-only) time, carried on `GameEvent.gameOver`
+    /// so it doesn't keep growing while the popup is open.
+    let elapsedMs: Int
 
     var total: Int { score + bonus }
     var title: String { won ? "You Win!" : "Game Over" }
+
+    /// `m:ss`, or `h:mm:ss` once the match runs an hour or more (spec 22).
+    /// Seconds (and minutes, once hours are shown) are always two digits.
+    var timeText: String {
+        let totalSeconds = elapsedMs / 1000
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%d:%02d", minutes, seconds)
+    }
 }
 
 /// Owns the `GameEngine`/`GameScene` pair and republishes their state for
@@ -122,9 +139,9 @@ final class GameViewModel: ObservableObject {
             self?.score = score
             self?.updateStatus()
         }
-        scene.onGameOver = { [weak self] won, score, bonus in
+        scene.onGameOver = { [weak self] won, score, bonus, elapsedMs in
             guard let self else { return }
-            gameOver = GameOverInfo(won: won, score: score, bonus: bonus)
+            gameOver = GameOverInfo(won: won, score: score, bonus: bonus, elapsedMs: elapsedMs)
             updateStatus()
             if let engine {
                 onGameOverHook?(engine)
