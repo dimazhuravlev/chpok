@@ -1,4 +1,4 @@
-# Bubble Shooter (iOS)
+# Chpok! (iOS)
 
 A native iOS port of the classic bubble-shooter game at [bubbleshooter.com](https://www.bubbleshooter.com/): the original's engine logic (deployed in an iframe from `https://cdn.bubbleshooter.com/games/bubbleshooter-game/`) is ported 1:1 to a deterministic, unit-tested Swift core, driving a SwiftUI + SpriteKit front end. The site was the starting point only; the game's look and feel now evolve according to the app owner's own requirements rather than mirroring the site.
 
