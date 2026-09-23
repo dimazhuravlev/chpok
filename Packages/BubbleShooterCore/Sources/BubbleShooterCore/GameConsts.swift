@@ -102,4 +102,14 @@ public enum GameConsts {
     /// Ceiling snap value used by `checkIfArrivedToPosition` when
     /// `y < BUBBLE_SIZE`: `y = 0.01 + BUBBLE_SIZE`.
     public static let ceilingSnapY: Double = 32.01
+
+    /// Per-bubble score step for a matched cluster: the `k`-th removed
+    /// bubble (1-based, in `removeSameColorCluster`'s reverse-insertion
+    /// order) scores `clusterPointsPerStep * ceil(k / 3)` — the first three
+    /// bubbles score 1 each, the next three 2 each, and so on, so a bigger
+    /// cluster is worth more per bubble than two smaller ones.
+    public static let clusterPointsPerStep = 1
+    /// Flat score awarded per bubble removed by `markHangingClusters` for
+    /// losing ceiling connectivity (not part of a color match).
+    public static let hangingBubblePoints = 10
 }

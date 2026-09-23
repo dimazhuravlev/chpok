@@ -36,8 +36,8 @@ Simulator builds are intentionally unsigned. To install on a real device: run `x
 - Board: **17 columns × 9 starting rows**, **6** bubble colors.
 - A shot fires on tap — matching the original's pointer-*down*-to-fire behavior (not pointer-up).
 - A landing cluster of same-colored, ceiling-connected bubbles pops once it reaches **3+** bubbles.
-- Score per popped bubble: **`10 · ceil(k/3)`**, where `k` is the bubble's 1-based position within the cluster (10, 10, 10, 20, 20, 20, 30, …).
-- Bubbles left disconnected from the ceiling after a pop ("hanging") are swept separately and score a flat **100** each.
+- Score per popped bubble: **`ceil(k/3)`**, where `k` is the bubble's 1-based position within the cluster (1, 1, 1, 2, 2, 2, 3, …).
+- Bubbles left disconnected from the ceiling after a pop ("hanging") are swept separately and score a flat **10** each.
 - **5** starting lives; each miss costs one life; once lives reach 0, a miss instead adds **`1 + (colors currently absent from the board)`** new row(s) at the top.
 - Winning (board fully cleared) doubles the score: final = `score + bonus`, with `bonus = score`.
 

@@ -334,7 +334,8 @@ extension GameEngine {
 
     /// Mirrors `BoardManager.removeSameColorCluster`: scores every
     /// `markedToBeRemoved` bubble in reverse-insertion order (`k` starting
-    /// at 1, `10*ceil(k/3)`), then schedules removal in a *separately*
+    /// at 1, `GameConsts.clusterPointsPerStep * ceil(k/3)`), then schedules
+    /// removal in a *separately*
     /// sorted geometric order (bottom-to-top, then left-to-right) staggered
     /// `70*i` ms — two independent orderings over the same set, exactly as
     /// the original (game-logic.md §8, §17.12).
@@ -346,7 +347,7 @@ extension GameEngine {
             var removedCount = 0
             for b in bubbles.reversed() where b.markedToBeRemoved {
                 removedCount += 1
-                b.pendingScore = 10 * Int(ceil(Double(removedCount) / 3.0))
+                b.pendingScore = GameConsts.clusterPointsPerStep * Int(ceil(Double(removedCount) / 3.0))
                 toBeRemovedArr.append(b)
             }
         }
@@ -401,9 +402,10 @@ extension GameEngine {
     /// Mirrors `BoardManager.markHangingClusters`: marks every onboard
     /// bubble as hanging, rescues everything reachable from row 0 via
     /// `traverseCluster`, then schedules removal (staggered `70*i` ms) for
-    /// whatever is still marked. `skipScore` suppresses the flat 100pt
-    /// bonus per bubble (used by `addNewRow`'s safety passes) but not the
-    /// removal itself. Note: like the original, the row-0 scan has no
+    /// whatever is still marked. `skipScore` suppresses the flat
+    /// `GameConsts.hangingBubblePoints` bonus per bubble (used by
+    /// `addNewRow`'s safety passes) but not the removal itself. Note: like
+    /// the original, the row-0 scan has no
     /// `state == .onBoard` filter (confirmed against source) — harmless in
     /// practice since ready/queue bubbles only ever reach `boardY == 0`
     /// after 10+ row additions.
@@ -421,7 +423,7 @@ extension GameEngine {
 
         let removeArray = bubbles.filter { $0.markedToBeHanged }
         if !skipScore {
-            for b in removeArray { b.pendingScore = 100 }
+            for b in removeArray { b.pendingScore = GameConsts.hangingBubblePoints }
         }
 
         markHangedTime = removeArray.count * GameConsts.removalStaggerMs

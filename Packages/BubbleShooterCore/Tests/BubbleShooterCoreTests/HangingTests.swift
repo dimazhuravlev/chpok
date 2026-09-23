@@ -3,8 +3,8 @@ import XCTest
 
 /// Hanging-cluster tests (game-logic.md §9, plus §13's win poll): removing
 /// the bridge bubble in a match can strand a same-color-irrelevant group,
-/// which is then swept as "hanging" for a flat 100pt bonus each; emptying
-/// the board this way still reaches the win screen.
+/// which is then swept as "hanging" for a flat `GameConsts.hangingBubblePoints`
+/// bonus each; emptying the board this way still reaches the win screen.
 final class HangingTests: XCTestCase {
 
     func testHangingClusterThenWin() {
@@ -49,22 +49,22 @@ final class HangingTests: XCTestCase {
             if case let .removed(_, _, _, points, _) = $0 { return points }
             return nil
         }
-        XCTAssertEqual(matchPoints.reduce(0, +), 30)
+        XCTAssertEqual(matchPoints.reduce(0, +), 3)
 
         XCTAssertEqual(hangingEvents.count, 1)
         if case let .removed(_, color, _, points, _)? = hangingEvents.first {
             XCTAssertEqual(color, .blue)
-            XCTAssertEqual(points, 100)
+            XCTAssertEqual(points, 10)
         }
 
-        XCTAssertEqual(engine.score, 130)
+        XCTAssertEqual(engine.score, 13)
         XCTAssertEqual(engine.boardBubbles.count, 0, "the board should be empty")
 
         guard let gameOverIndex = events.firstIndex(where: { if case .gameOver = $0 { return true }; return false }) else {
             XCTFail("expected a .gameOver event")
             return
         }
-        XCTAssertEqual(events[gameOverIndex], .gameOver(won: true, score: 130, bonus: 130, elapsedMs: elapsed))
+        XCTAssertEqual(events[gameOverIndex], .gameOver(won: true, score: 13, bonus: 13, elapsedMs: elapsed))
 
         // All .removed events must precede .gameOver (game-logic.md §13: the
         // board empties out synchronously inside the last remove() call,
