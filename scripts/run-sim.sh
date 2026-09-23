@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-UDID="3BABAF15-2ADF-4D42-9EFC-89FF1BE39286"
+UDID="82760CFF-E851-48E3-8909-A2541FCB87D3"
 BUNDLE_ID="com.dimazhuravlev.BubbleShooter"
 APP="${1:-$(pwd)/build/DerivedData/Build/Products/Debug-iphonesimulator/BubbleShooter.app}"
 
