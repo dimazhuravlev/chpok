@@ -4,6 +4,12 @@ import SpriteKit
 struct RootView: View {
     @StateObject var vm = GameViewModel()
     @Environment(\.scenePhase) private var scenePhase
+    /// Debug entry point: launching with `-showGameOverDemo` shows
+    /// `GameOverScreen` immediately with sample data (score 47, time 2:47),
+    /// so the fullscreen game-over look can be eyeballed without playing a
+    /// match to the end. Tapping "new game" clears it and falls through to
+    /// the normal game, same as a real game over.
+    @State private var showGameOverDemo = CommandLine.arguments.contains("-showGameOverDemo")
 
     var body: some View {
         ZStack {
@@ -30,19 +36,31 @@ struct RootView: View {
                     // this GeometryReader's own bottom, so the cannon/queue
                     // bubbles still land at their absolute Figma positions.
                     .padding(.top, GameViewModel.sceneTopInset(areaWidth: Double(geo.size.width)))
-                    .onAppear { vm.prepare(containerSize: sceneContainerSize(for: geo.size)) }
+                    .onAppear {
+                        Haptics.shared.prepareForButton()
+                        vm.prepare(containerSize: sceneContainerSize(for: geo.size))
+                    }
                     .onChange(of: geo.size) { vm.prepare(containerSize: sceneContainerSize(for: $0)) }
                 }
                 .padding(.horizontal, 10)
             }
             .ignoresSafeArea(edges: .bottom)
 
-            if let info = vm.gameOver {
-                GameOverOverlay(info: info, onOK: vm.dismissGameOver)
+            if showGameOverDemo {
+                GameOverScreen(
+                    info: GameOverInfo(won: true, score: 47, bonus: 0, elapsedMs: 167_000),
+                    onNewGame: { showGameOverDemo = false }
+                )
+                .transition(.opacity)
+            } else if let info = vm.gameOver {
+                GameOverScreen(info: info, onNewGame: vm.dismissGameOver)
+                    .transition(.opacity)
             }
         }
         .background(Color(Palette.background).ignoresSafeArea())
         .preferredColorScheme(.dark)
+        .animation(.easeInOut, value: vm.gameOver)
+        .animation(.easeInOut, value: showGameOverDemo)
         .onChange(of: scenePhase) { if $0 != .active { vm.persistIfPossible() } }
     }
 

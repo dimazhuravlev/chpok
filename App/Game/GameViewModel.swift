@@ -1,7 +1,7 @@
 import SwiftUI
 import BubbleShooterCore
 
-/// Snapshot shown by the game-over popup.
+/// Snapshot shown by the game-over screen.
 struct GameOverInfo: Equatable {
     let won: Bool
     let score: Int
@@ -12,7 +12,9 @@ struct GameOverInfo: Equatable {
     let elapsedMs: Int
 
     var total: Int { score + bonus }
-    var title: String { won ? "You Win!" : "Game Over" }
+    /// Lowercase with an exclamation mark, matching the rest of the
+    /// fullscreen game-over screen's typography (spec 26).
+    var title: String { won ? "you win!" : "you lose!" }
 
     /// `m:ss`, or `h:mm:ss` once the match runs an hour or more (spec 22).
     /// Seconds (and minutes, once hours are shown) are always two digits.

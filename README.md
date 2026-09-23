@@ -16,6 +16,7 @@ The project is built, tested and run through the scripts in `scripts/`. Each one
 |---|---|
 | `scripts/build.sh` | Regenerates the Xcode project (`xcodegen generate`) and builds the `BubbleShooter` app for the simulator (Debug). Log: `build/xcodebuild-build.log`. |
 | `scripts/run-sim.sh [path-to-.app]` | Boots the simulator, opens `Simulator.app`, installs and launches the app, and saves a screenshot to `build/screenshots/`. Defaults to the app produced by `build.sh`. |
+| `scripts/run-gameover-demo.sh` | Same as `run-sim.sh`, but launches with `-showGameOverDemo` so the app opens straight into the fullscreen game-over screen (sample data) instead of a fresh board — useful for eyeballing that screen without playing a match to the end. |
 | `scripts/test-core.sh` | Runs the core engine's unit tests (`swift test` in `Packages/BubbleShooterCore`). |
 | `scripts/test-ui.sh` | Builds and runs the UI test bundle (`BubbleShooterUITests`) on the simulator via `xcodebuild test`. Log: `build/xcodebuild-test.log`. |
 
@@ -28,7 +29,7 @@ Simulator builds are intentionally unsigned. To install on a real device: run `x
 ## Architecture
 
 - **`Packages/BubbleShooterCore`** — a platform-independent Swift package with the game engine (no UIKit/SwiftUI/SpriteKit imports). `GameEngine` advances state on a fixed **15 ms** tick (`GameConsts.tickMs`), driven by a single `TimerQueue` that replaces the original's one-Phaser-timer-per-bubble scheme with an equivalent deterministic global tick. State changes are reported as a stream of `GameEvent`s (score changed, bubble removed, game over, …) for the app layer to consume. `GameEngine` can be created fresh or restored from a `GameSnapshot`, and is covered by its own test target, `BubbleShooterCoreTests`.
-- **`App`** — the iOS app. `GameViewModel` (`ObservableObject`) owns the `GameEngine`/`GameScene` pair and republishes their state to SwiftUI views (`RootView`, `HUDView`, `GameOverOverlay`). `GameScene` (SpriteKit) renders the board and turns taps into shots. `GameSaveStore` persists the single in-progress match as JSON under Application Support; `GameViewModel` loads it on launch and saves on backgrounding/turn resolution.
+- **`App`** — the iOS app. `GameViewModel` (`ObservableObject`) owns the `GameEngine`/`GameScene` pair and republishes their state to SwiftUI views (`RootView`, `HUDView`, `GameOverScreen`). `GameScene` (SpriteKit) renders the board and turns taps into shots. `GameSaveStore` persists the single in-progress match as JSON under Application Support; `GameViewModel` loads it on launch and saves on backgrounding/turn resolution.
 - **`UITests`** — `SmokeUITests` (app launches), `GameplayUITests` (tap-to-fire, Restart resets the board, gameplay screenshot), `PersistenceUITests` (save/resume across a relaunch).
 
 ## Game rules and constants (from the original)

@@ -18,12 +18,15 @@ struct HUDView: View {
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("scoreLabel")
                 Spacer()
-                Button("restart") { onRestart() }
-                    .font(.pretendardSemiBold(32))
-                    .tint(.white)
-                    .foregroundStyle(.white)
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("restartButton")
+                Button("restart") {
+                    Haptics.shared.buttonTapped()
+                    onRestart()
+                }
+                .font(.pretendardSemiBold(32))
+                .tint(.white)
+                .foregroundStyle(.white)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("restartButton")
             }
             .padding(.horizontal, 16)
 

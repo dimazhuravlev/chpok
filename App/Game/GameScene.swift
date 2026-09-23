@@ -7,7 +7,7 @@ import BubbleShooterCore
 final class GameScene: SKScene {
     private let engine: GameEngine
     private let geometry: SceneGeometry
-    private let haptics = Haptics()
+    private let haptics = Haptics.shared
 
     /// Live bubble nodes keyed by `Bubble.id`.
     private var nodes: [Int: SKNode] = [:]
