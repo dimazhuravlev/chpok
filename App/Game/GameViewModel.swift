@@ -35,6 +35,11 @@ struct GameOverInfo: Equatable {
 /// restored from a save without touching `GameScene`.
 @MainActor
 final class GameViewModel: ObservableObject {
+    /// Fade duration for the game-over screen's `.transition(.opacity)`,
+    /// shared by every `gameOver`/`showGameOverDemo` mutation so the
+    /// appear/disappear fades stay symmetric (spec 27).
+    static let gameOverFadeDuration: Double = 0.25
+
     @Published var score = 0
     @Published var livesLeft = 5
     @Published var maxLives = GameConsts.initialLives
@@ -143,7 +148,9 @@ final class GameViewModel: ObservableObject {
         }
         scene.onGameOver = { [weak self] won, score, bonus, elapsedMs in
             guard let self else { return }
-            gameOver = GameOverInfo(won: won, score: score, bonus: bonus, elapsedMs: elapsedMs)
+            withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
+                self.gameOver = GameOverInfo(won: won, score: score, bonus: bonus, elapsedMs: elapsedMs)
+            }
             updateStatus()
             if let engine {
                 onGameOverHook?(engine)
@@ -183,7 +190,9 @@ final class GameViewModel: ObservableObject {
     func restart() {
         guard let engine, let scene else { return }
         engine.resetBoard()
-        gameOver = nil
+        withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
+            gameOver = nil
+        }
         scene.rebuild()
     }
 

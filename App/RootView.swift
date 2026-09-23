@@ -49,7 +49,7 @@ struct RootView: View {
             if showGameOverDemo {
                 GameOverScreen(
                     info: GameOverInfo(won: true, score: 47, bonus: 0, elapsedMs: 167_000),
-                    onNewGame: { showGameOverDemo = false }
+                    onNewGame: { withAnimation(.easeInOut(duration: GameViewModel.gameOverFadeDuration)) { showGameOverDemo = false } }
                 )
                 .transition(.opacity)
             } else if let info = vm.gameOver {
@@ -59,8 +59,6 @@ struct RootView: View {
         }
         .background(Color(Palette.background).ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .animation(.easeInOut, value: vm.gameOver)
-        .animation(.easeInOut, value: showGameOverDemo)
         .onChange(of: scenePhase) { if $0 != .active { vm.persistIfPossible() } }
     }
 
