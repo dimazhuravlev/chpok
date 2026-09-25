@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 UDID="82760CFF-E851-48E3-8909-A2541FCB87D3"
-BUNDLE_ID="com.dimazhuravlev.BubbleShooter"
+BUNDLE_ID="com.dimazhuravlev.chpok"
 APP="${1:-$(pwd)/build/DerivedData/Build/Products/Debug-iphonesimulator/BubbleShooter.app}"
 
 xcrun simctl bootstatus "$UDID" -b

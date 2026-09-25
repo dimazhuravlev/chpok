@@ -10,7 +10,7 @@ A native iOS port of the classic bubble-shooter game at [bubbleshooter.com](http
 
 ## Commands
 
-The project is built, tested and run through the scripts in `scripts/`. Each one is self-contained (`cd`s to the repo root itself) and targets a fixed simulator: iPhone 17 Pro, bundle id `com.dimazhuravlev.BubbleShooter`.
+The project is built, tested and run through the scripts in `scripts/`. Each one is self-contained (`cd`s to the repo root itself) and targets a fixed simulator: iPhone 17 Pro, bundle id `com.dimazhuravlev.chpok`.
 
 | Script | What it does |
 |---|---|
@@ -29,6 +29,16 @@ Simulator builds are intentionally unsigned. To install on a real device: run `x
 ## Release
 
 Version and build number are set in `project.yml`, under the `BubbleShooter` target's settings: `MARKETING_VERSION` (the user-facing version shown in the App Store, e.g. `1.0`) and `CURRENT_PROJECT_VERSION` (the build number). The build number is set by hand — bump `CURRENT_PROJECT_VERSION` before every new upload to TestFlight; App Store Connect rejects a re-upload of the same build number for a given version.
+
+### Publishing to TestFlight
+
+Requires a paid Apple Developer account connected in Xcode (Settings → Accounts) and an app record already created in App Store Connect for bundle id `com.dimazhuravlev.chpok`.
+
+1. Bump `CURRENT_PROJECT_VERSION` in `project.yml` (App Store Connect rejects re-uploading a build number already used for the current `MARKETING_VERSION`).
+2. Run `scripts/archive.sh`. It regenerates the project, builds a Release archive with `xcodebuild archive`, and drops it in Xcode's standard archives folder (`~/Library/Developer/Xcode/Archives/<date>/`) so it shows up in Organizer automatically. It prints `ARCHIVE=<path>` on success.
+3. Open Xcode → Window → Organizer → Archives, select the new archive, and click **Distribute App**.
+4. Follow the Organizer flow (App Store Connect → Upload); resolve any certificate/profile prompts there — the script deliberately does not sign for distribution or upload anything itself.
+5. Wait for the build to finish processing in App Store Connect, then assign it to a TestFlight group.
 
 ## Architecture
 
