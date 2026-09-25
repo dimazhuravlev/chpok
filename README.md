@@ -58,7 +58,7 @@ Signing for distribution is picked automatically: `project.yml` sets `CODE_SIGN_
 - **5** starting lives; each miss costs one life; once lives reach 0, a miss instead adds **`1 + (colors currently absent from the board)`** new row(s) at the top.
 - Winning (board fully cleared) doubles the score: final = `score + bonus`, with `bonus = score`.
 
-See `docs/original-game-logic.md` for the full derivation — every rule, timer, coordinate formula and original quirk, each backed by a line reference into the original's JS.
+The full derivation of these rules — every timer, coordinate formula and quirk — was written up while porting and is kept outside this repository.
 
 ## Deliberate deviations from the original
 
@@ -73,6 +73,6 @@ See `docs/original-game-logic.md` for the full derivation — every rule, timer,
 
 - Sound.
 - The original's dev cheats (Space/Q hotkeys to change the ready bubble's color or drop the last row).
-- Dead/unreachable code identified in the original while reading it (unused constants, the unreachable "add high score" name-entry flow, `banBubbleFromShooting`, the always-zero recoil offset, etc. — catalogued in `docs/original-game-logic.md`).
+- Dead/unreachable code identified in the original while reading it (unused constants, the unreachable "add high score" name-entry flow, `banBubbleFromShooting`, the always-zero recoil offset, etc.).
 - The Top 10 high-score screen.
 - Any menu: the app opens straight into the board. Only the current in-progress match is ever persisted (no history), Restart acts immediately without a confirmation prompt, and winning starts a brand-new match from scratch.
