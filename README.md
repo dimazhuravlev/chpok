@@ -26,6 +26,10 @@ Run them in that rough order (`test-core` → `build` → `test-ui` → `run-sim
 
 Simulator builds are intentionally unsigned. To install on a real device: run `xcodegen generate` (or any script above, which does this for you), open the generated `BubbleShooter.xcodeproj` in Xcode, select your iPhone as the run destination, and press **Run**. Automatic signing (`DEVELOPMENT_TEAM = Z55ZV5538M`) provisions and signs the app; the first run may need you to trust the developer certificate on the device under Settings → General → VPN & Device Management.
 
+## Release
+
+Version and build number are set in `project.yml`, under the `BubbleShooter` target's settings: `MARKETING_VERSION` (the user-facing version shown in the App Store, e.g. `1.0`) and `CURRENT_PROJECT_VERSION` (the build number). The build number is set by hand — bump `CURRENT_PROJECT_VERSION` before every new upload to TestFlight; App Store Connect rejects a re-upload of the same build number for a given version.
+
 ## Architecture
 
 - **`Packages/BubbleShooterCore`** — a platform-independent Swift package with the game engine (no UIKit/SwiftUI/SpriteKit imports). `GameEngine` advances state on a fixed **15 ms** tick (`GameConsts.tickMs`), driven by a single `TimerQueue` that replaces the original's one-Phaser-timer-per-bubble scheme with an equivalent deterministic global tick. State changes are reported as a stream of `GameEvent`s (score changed, bubble removed, game over, …) for the app layer to consume. `GameEngine` can be created fresh or restored from a `GameSnapshot`, and is covered by its own test target, `BubbleShooterCoreTests`.

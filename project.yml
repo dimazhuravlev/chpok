@@ -34,8 +34,9 @@ targets:
         "CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]": "NO"
         "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": ""
         "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "Apple Development"
-        MARKETING_VERSION: 0.1.0
+        MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: 1
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
 
   BubbleShooterUITests:
     type: bundle.ui-testing
