@@ -34,6 +34,8 @@ Version and build number are set in `project.yml`, under the `BubbleShooter` tar
 
 Requires a paid Apple Developer account connected in Xcode (Settings → Accounts) and an app record already created in App Store Connect for bundle id `com.dimazhuravlev.chpok`.
 
+Signing for distribution is picked automatically: `project.yml` sets `CODE_SIGN_STYLE: Automatic` and `DEVELOPMENT_TEAM`, with no `CODE_SIGN_IDENTITY` override for `iphoneos`. With automatic signing, Xcode itself chooses the right certificate type for the build it's doing — `Apple Development` when running on a device, `Apple Distribution` when archiving for release. There should never be a manual certificate-type pin in the project again; if archiving still signs with `Apple Development`, that means no distribution certificate exists yet (Xcode Organizer's Distribute App flow, or `-allowProvisioningUpdates` with an authenticated account, creates one).
+
 1. Bump `CURRENT_PROJECT_VERSION` in `project.yml` (App Store Connect rejects re-uploading a build number already used for the current `MARKETING_VERSION`).
 2. Run `scripts/archive.sh`. It regenerates the project, builds a Release archive with `xcodebuild archive`, and drops it in Xcode's standard archives folder (`~/Library/Developer/Xcode/Archives/<date>/`) so it shows up in Organizer automatically. It prints `ARCHIVE=<path>` on success.
 3. Open Xcode → Window → Organizer → Archives, select the new archive, and click **Distribute App**.
