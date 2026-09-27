@@ -43,7 +43,7 @@ final class GameViewModel: ObservableObject {
     /// fully finished fading out (spec 31) — see `dismissGameOver()`, which
     /// starts this only after `gameOverFadeDuration` has elapsed so the two
     /// screens never cross-fade over each other.
-    static let gameFadeInDuration: Double = 0.5
+    static let gameFadeInDuration: Double = 0.8
     /// Extra lift (points) applied to both the cannon and queue-bubble
     /// positions in `prepare(containerSize:)` (spec 31): the queue bubble
     /// used to be clipped by the bottom edge, so both move up by this same
@@ -61,7 +61,10 @@ final class GameViewModel: ObservableObject {
     /// `dismissGameOver()` only after the game-over screen has fully faded
     /// out. `restart()` never touches it, so it stays at 1 during normal
     /// play.
-    @Published var gameOpacity: Double = 1
+    /// Starts at 0 so the very first appearance of the game — app launch —
+    /// fades in over `gameFadeInDuration` exactly like the one after the
+    /// game-over screen, rather than snapping in (owner request).
+    @Published var gameOpacity: Double = 0
     /// Exact format `bubbles:<N> score:<S> lives:<L>`, N = `engine.boardBubbles.count`.
     @Published var status: String = "bubbles:0 score:0 lives:5"
 
@@ -131,6 +134,14 @@ final class GameViewModel: ObservableObject {
         )
         let engine = makeEngine(layout)
         let scene = GameScene(engine: engine, canvasHeight: canvasHeight)
+
+        // First appearance: the view starts at `gameOpacity == 0`, so fade
+        // the whole screen in once the scene actually exists.
+        defer {
+            withAnimation(.easeInOut(duration: Self.gameFadeInDuration)) {
+                gameOpacity = 1
+            }
+        }
 
         self.engine = engine
         self.scene = scene
