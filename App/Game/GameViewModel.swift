@@ -49,7 +49,7 @@ final class GameViewModel: ObservableObject {
     /// used to be clipped by the bottom edge, so both move up by this same
     /// amount, keeping the 96pt gap between their centers untouched. One
     /// constant to tweak the whole block.
-    static let cannonBlockLift: Double = 24
+    static let cannonBlockLift: Double = 48
 
     @Published var score = 0
     @Published var livesLeft = 5
