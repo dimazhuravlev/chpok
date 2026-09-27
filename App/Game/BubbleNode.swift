@@ -43,6 +43,43 @@ final class BubbleNode: SKSpriteNode {
         return texture
     }()
 
+    /// Shared white-ring texture for the bubble's border (spec 35). This
+    /// can't be baked into `circleTexture`'s fill: the fill is tinted
+    /// per-bubble via `color`/`colorBlendFactor = 1`, which would tint a
+    /// baked-in ring too and turn a *white* border into a colored one.
+    /// Instead this is applied through a separate child sprite whose
+    /// `colorBlendFactor = 0` keeps it white regardless of the parent's tint.
+    ///
+    /// Same 256×256 size and 2pt inset as `circleTexture`, so both share the
+    /// same outer radius (126px) — the ring's outer edge lines up exactly
+    /// with the fill's outer edge instead of drifting from independently
+    /// rounded numbers. Ring thickness is 1/30 of the fill's 252px diameter
+    /// (~8.4px), matching the design's "1 unit out of the bubble's 30".
+    /// The stroked path radius is set half a line-width *inside* the fill's
+    /// outer radius — a stroke straddles its path, so that inset is what
+    /// puts the outer edge of the drawn ring (not its path) exactly at the
+    /// fill's outer radius.
+    private static let ringTexture: SKTexture = {
+        let textureSize: CGFloat = 256
+        let inset: CGFloat = 2
+        let fillRect = CGRect(x: inset, y: inset, width: textureSize - inset * 2, height: textureSize - inset * 2)
+        let lineWidth = fillRect.width / 30
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: textureSize, height: textureSize))
+        let image = renderer.image { _ in
+            let strokeRect = fillRect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
+            let path = UIBezierPath(ovalIn: strokeRect)
+            path.lineWidth = lineWidth
+            UIColor.white.setStroke()
+            path.stroke()
+        }
+        let texture = SKTexture(image: image)
+        texture.filteringMode = .linear
+        // Same reasoning as `circleTexture`: without mipmaps this thin ring
+        // aliases into a broken, dotted line once minified to on-screen size.
+        texture.usesMipmaps = true
+        return texture
+    }()
+
     /// The slot color currently applied via `color`/`colorBlendFactor`, kept
     /// in sync by `apply(color:)`. Spec 33: the match-removal flash reads
     /// this back to compute its lightened tint, so it works from the
@@ -54,6 +91,24 @@ final class BubbleNode: SKSpriteNode {
         super.init(texture: Self.circleTexture, color: .white, size: Self.logicalSize)
         colorBlendFactor = 1
         zPosition = 10
+
+        // Spec 35: thin white border, as a child sprite rather than baked
+        // into the fill (see `ringTexture`'s doc comment for why).
+        // `colorBlendFactor = 0` keeps it white no matter what
+        // `apply(color:)` later does to this node's own `color`; `alpha`
+        // is the border's own opacity from the design. Same 30×30 logical
+        // size as the fill, centered on the parent's origin, so its ring
+        // lines up exactly with the fill's edge; it needs no independent
+        // scale/alpha animation of its own because a child sprite's
+        // rendering already inherits the parent's scale (and, during the
+        // match-removal flash's shrink/fade, the parent's alpha) for free.
+        let border = SKSpriteNode(texture: Self.ringTexture, color: .white, size: Self.logicalSize)
+        border.position = .zero
+        border.colorBlendFactor = 0
+        border.alpha = 0.05
+        border.zPosition = 1
+        addChild(border)
+
         apply(color: color)
     }
 
