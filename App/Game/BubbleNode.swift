@@ -36,6 +36,10 @@ final class BubbleNode: SKSpriteNode {
         }
         let texture = SKTexture(image: image)
         texture.filteringMode = .linear
+        // The 256px source is minified ~4x on screen; without mipmaps a
+        // 2x2 linear sample undersamples that reduction and the edge still
+        // aliases. Mipmaps give a properly pre-filtered level to sample.
+        texture.usesMipmaps = true
         return texture
     }()
 
