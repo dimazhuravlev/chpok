@@ -75,16 +75,6 @@ final class GameScene: SKScene {
     /// How far the fill lightens toward white at the flash's peak (0 = no
     /// change, 1 = pure white).
     private let flashLightenFraction: CGFloat = 0.35
-    /// Outline width during the flash — held constant; only its alpha
-    /// animates.
-    private let flashStrokeWidth: CGFloat = 1
-    /// Outline alpha reached at the flash's peak (starts at 0).
-    private let flashStrokeAlpha: CGFloat = 0.3
-    /// Halo width (`SKShapeNode.glowWidth`) reached at the flash's peak
-    /// (starts at 0). SpriteKit tints the glow using `strokeColor`, so
-    /// setting that to the same lightened tint keeps the halo in tone for
-    /// free — no separate glow color to track.
-    private let flashGlowWidth: CGFloat = 6
 
     var onScoreChanged: ((Int) -> Void)?
     var onGameOver: ((Bool, Int, Int, Int) -> Void)?
@@ -363,9 +353,6 @@ final class GameScene: SKScene {
 
         let duration = flashDuration
         let scale = flashScale
-        let strokeWidth = flashStrokeWidth
-        let strokeAlpha = flashStrokeAlpha
-        let glowWidth = flashGlowWidth
 
         return SKAction.customAction(withDuration: duration) { node, elapsed in
             guard let shape = node as? SKShapeNode else { return }
@@ -382,9 +369,6 @@ final class GameScene: SKScene {
                 blue: baseB + (litB - baseB) * eased,
                 alpha: baseA + (litA - baseA) * eased
             )
-            shape.lineWidth = strokeWidth
-            shape.strokeColor = SKColor(red: litR, green: litG, blue: litB, alpha: strokeAlpha * eased)
-            shape.glowWidth = glowWidth * eased
         }
     }
 
