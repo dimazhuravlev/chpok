@@ -65,12 +65,39 @@ final class BubbleNode: SKSpriteNode {
         let fillRect = CGRect(x: inset, y: inset, width: textureSize - inset * 2, height: textureSize - inset * 2)
         let lineWidth = fillRect.width / 30
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: textureSize, height: textureSize))
-        let image = renderer.image { _ in
+        let image = renderer.image { ctx in
+            let cg = ctx.cgContext
+            // Clip to the ring, then fill that band with the design's
+            // diagonal gradient. Stroking with a solid color can't express
+            // a gradient, and the alpha has to live in the texture's own
+            // pixels — a uniform `alpha` on the sprite would scale the whole
+            // ramp and flatten it back out.
             let strokeRect = fillRect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
-            let path = UIBezierPath(ovalIn: strokeRect)
-            path.lineWidth = lineWidth
-            UIColor.white.setStroke()
-            path.stroke()
+            let ring = UIBezierPath(ovalIn: strokeRect)
+            ring.lineWidth = lineWidth
+            cg.addPath(ring.cgPath)
+            cg.setLineWidth(lineWidth)
+            cg.replacePathWithStrokedPath()
+            cg.clip()
+
+            // Figma: linear gradient at 45°, white 5% at the bottom-left end
+            // to white 15% at the top-right end. These are UIKit drawing
+            // coordinates (y grows down), so bottom-left is the larger y.
+            let colors = [
+                UIColor(white: 1, alpha: 0.05).cgColor,
+                UIColor(white: 1, alpha: 0.15).cgColor
+            ] as CFArray
+            guard let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: colors,
+                locations: [0, 1]
+            ) else { return }
+            cg.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: inset, y: textureSize - inset),
+                end: CGPoint(x: textureSize - inset, y: inset),
+                options: []
+            )
         }
         let texture = SKTexture(image: image)
         texture.filteringMode = .linear
@@ -105,7 +132,10 @@ final class BubbleNode: SKSpriteNode {
         let border = SKSpriteNode(texture: Self.ringTexture, color: .white, size: Self.logicalSize)
         border.position = .zero
         border.colorBlendFactor = 0
-        border.alpha = 0.05
+        // Opacity lives per-pixel in the gradient texture (5%…15%), so the
+        // sprite itself stays fully opaque; scaling it here would squash
+        // the ramp.
+        border.alpha = 1
         border.zPosition = 1
         addChild(border)
 
