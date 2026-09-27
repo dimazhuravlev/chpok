@@ -57,6 +57,35 @@ final class GameScene: SKScene {
     /// only later replacements slide (spec 21 step 3 exception).
     private var hasQueueBubbleAppeared = false
 
+    // MARK: - Match-removal flash tuning (spec 33)
+    //
+    // A match removal plays two phases in sequence: this flash, then the
+    // pre-existing shrink-to-zero + fade-out. Every tunable number for the
+    // flash is kept here, next to each other, so the whole beat can be
+    // re-timed with a single edit.
+    /// Flash phase duration — first phase of a match removal, replacing the
+    /// old plain scale-up. The second phase's duration is unchanged, so the
+    /// small increase here is the only change to the overall removal time.
+    private let flashDuration: TimeInterval = 0.08
+    /// Second phase duration (simultaneous shrink-to-zero + fade-out) —
+    /// unchanged from before this spec.
+    private let popFadeDuration: TimeInterval = 0.12
+    /// Scale reached at the flash's peak (the node's normal scale is 1).
+    private let flashScale: CGFloat = 1.18
+    /// How far the fill lightens toward white at the flash's peak (0 = no
+    /// change, 1 = pure white).
+    private let flashLightenFraction: CGFloat = 0.35
+    /// Outline width during the flash — held constant; only its alpha
+    /// animates.
+    private let flashStrokeWidth: CGFloat = 1
+    /// Outline alpha reached at the flash's peak (starts at 0).
+    private let flashStrokeAlpha: CGFloat = 0.3
+    /// Halo width (`SKShapeNode.glowWidth`) reached at the flash's peak
+    /// (starts at 0). SpriteKit tints the glow using `strokeColor`, so
+    /// setting that to the same lightened tint keeps the halo in tone for
+    /// free — no separate glow color to track.
+    private let flashGlowWidth: CGFloat = 6
+
     var onScoreChanged: ((Int) -> Void)?
     var onGameOver: ((Bool, Int, Int, Int) -> Void)?
     var onTurnResolved: (() -> Void)?
@@ -292,12 +321,23 @@ final class GameScene: SKScene {
         let action: SKAction
         switch reason {
         case .match:
-            let grow = SKAction.scale(to: 1.25, duration: 0.06)
+            // Spec 33 step 3: the shrink+fade phase is unchanged; the glow
+            // and outline set up by the flash below ride along with it for
+            // free since they're rendered as part of this same node — no
+            // need to fade them out separately.
             let shrinkAndFade = SKAction.group([
-                SKAction.scale(to: 0, duration: 0.12),
-                SKAction.fadeOut(withDuration: 0.12)
+                SKAction.scale(to: 0, duration: popFadeDuration),
+                SKAction.fadeOut(withDuration: popFadeDuration)
             ])
-            action = SKAction.sequence([grow, shrinkAndFade, cleanup])
+            if let bubble = node as? BubbleNode {
+                action = SKAction.sequence([flashAction(for: bubble), shrinkAndFade, cleanup])
+            } else {
+                // Defensive fallback — every node in `nodes` is actually a
+                // `BubbleNode` (see `sync()`), so this never runs in
+                // practice, but skips the flash cleanly if that ever stops
+                // holding true instead of crashing.
+                action = SKAction.sequence([shrinkAndFade, cleanup])
+            }
         case .hanging:
             let fall = SKAction.group([
                 SKAction.moveBy(x: 0, y: -300, duration: 0.45),
@@ -306,6 +346,46 @@ final class GameScene: SKScene {
             action = SKAction.sequence([fall, cleanup])
         }
         node.run(action)
+    }
+
+    /// Spec 33 step 2: the flash that opens a match removal. Runs as one
+    /// `customAction` so scale, fill color, outline alpha, and glow all ease
+    /// in together, from the bubble's actual current color (read via
+    /// `BubbleNode.currentColor`, so a spec-32 palette customization flashes
+    /// in its own hue) toward the same lightened tint.
+    private func flashAction(for bubble: BubbleNode) -> SKAction {
+        let baseColor = bubble.currentColor
+        let litColor = baseColor.lightened(by: flashLightenFraction)
+        var baseR: CGFloat = 0, baseG: CGFloat = 0, baseB: CGFloat = 0, baseA: CGFloat = 0
+        baseColor.getRed(&baseR, green: &baseG, blue: &baseB, alpha: &baseA)
+        var litR: CGFloat = 0, litG: CGFloat = 0, litB: CGFloat = 0, litA: CGFloat = 0
+        litColor.getRed(&litR, green: &litG, blue: &litB, alpha: &litA)
+
+        let duration = flashDuration
+        let scale = flashScale
+        let strokeWidth = flashStrokeWidth
+        let strokeAlpha = flashStrokeAlpha
+        let glowWidth = flashGlowWidth
+
+        return SKAction.customAction(withDuration: duration) { node, elapsed in
+            guard let shape = node as? SKShapeNode else { return }
+            // `elapsed` is the time since the action started, in seconds —
+            // turn it into a 0...1 progress and ease it out slightly so the
+            // flash settles rather than arriving at a constant rate.
+            let t = duration > 0 ? min(1, max(0, CGFloat(elapsed) / CGFloat(duration))) : 1
+            let eased = t * (2 - t)
+
+            shape.setScale(1 + (scale - 1) * eased)
+            shape.fillColor = SKColor(
+                red: baseR + (litR - baseR) * eased,
+                green: baseG + (litG - baseG) * eased,
+                blue: baseB + (litB - baseB) * eased,
+                alpha: baseA + (litA - baseA) * eased
+            )
+            shape.lineWidth = strokeWidth
+            shape.strokeColor = SKColor(red: litR, green: litG, blue: litB, alpha: strokeAlpha * eased)
+            shape.glowWidth = glowWidth * eased
+        }
     }
 
     private func performBoardReset() {
