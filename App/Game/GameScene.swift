@@ -355,15 +355,15 @@ final class GameScene: SKScene {
         let scale = flashScale
 
         return SKAction.customAction(withDuration: duration) { node, elapsed in
-            guard let shape = node as? SKShapeNode else { return }
+            guard let sprite = node as? SKSpriteNode else { return }
             // `elapsed` is the time since the action started, in seconds —
             // turn it into a 0...1 progress and ease it out slightly so the
             // flash settles rather than arriving at a constant rate.
             let t = duration > 0 ? min(1, max(0, CGFloat(elapsed) / CGFloat(duration))) : 1
             let eased = t * (2 - t)
 
-            shape.setScale(1 + (scale - 1) * eased)
-            shape.fillColor = SKColor(
+            sprite.setScale(1 + (scale - 1) * eased)
+            sprite.color = SKColor(
                 red: baseR + (litR - baseR) * eased,
                 green: baseG + (litG - baseG) * eased,
                 blue: baseB + (litB - baseB) * eased,
