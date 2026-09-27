@@ -45,6 +45,11 @@ struct RootView: View {
                 .padding(.horizontal, 10)
             }
             .ignoresSafeArea(edges: .bottom)
+            // Own opacity, driven by `GameViewModel.gameOpacity` (spec 31):
+            // zero while the game-over screen is up, animated back to one
+            // by `dismissGameOver()` only after that screen has fully faded
+            // out, so the two screens never show through each other.
+            .opacity(vm.gameOpacity)
 
             if showGameOverDemo {
                 GameOverScreen(

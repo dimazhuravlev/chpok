@@ -45,7 +45,7 @@ struct GameOverScreen: View {
                 Spacer()
 
                 VStack(spacing: 8) {
-                    Text("score \(info.total)")
+                    Text(verbatim: "score \(info.total)")
                         .accessibilityIdentifier("gameOverTotal")
                     Text("time \(info.timeText)")
                         .accessibilityIdentifier("gameOverTime")

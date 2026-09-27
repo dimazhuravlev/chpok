@@ -39,11 +39,29 @@ final class GameViewModel: ObservableObject {
     /// shared by every `gameOver`/`showGameOverDemo` mutation so the
     /// appear/disappear fades stay symmetric (spec 27).
     static let gameOverFadeDuration: Double = 0.25
+    /// How long the game scene fades back in once the game-over screen has
+    /// fully finished fading out (spec 31) — see `dismissGameOver()`, which
+    /// starts this only after `gameOverFadeDuration` has elapsed so the two
+    /// screens never cross-fade over each other.
+    static let gameFadeInDuration: Double = 0.5
+    /// Extra lift (points) applied to both the cannon and queue-bubble
+    /// positions in `prepare(containerSize:)` (spec 31): the queue bubble
+    /// used to be clipped by the bottom edge, so both move up by this same
+    /// amount, keeping the 96pt gap between their centers untouched. One
+    /// constant to tweak the whole block.
+    static let cannonBlockLift: Double = 24
 
     @Published var score = 0
     @Published var livesLeft = 5
     @Published var maxLives = GameConsts.initialLives
     @Published var gameOver: GameOverInfo?
+    /// Opacity of the game screen's own container (spec 31): 0 while the
+    /// game-over screen is showing (set the instant it appears, with no
+    /// animation — see `onGameOver` below), animated back to 1 by
+    /// `dismissGameOver()` only after the game-over screen has fully faded
+    /// out. `restart()` never touches it, so it stays at 1 during normal
+    /// play.
+    @Published var gameOpacity: Double = 1
     /// Exact format `bubbles:<N> score:<S> lives:<L>`, N = `engine.boardBubbles.count`.
     @Published var status: String = "bubbles:0 score:0 lives:5"
 
@@ -84,10 +102,12 @@ final class GameViewModel: ObservableObject {
     /// what SpriteKit renders. Later calls (e.g. from further size changes)
     /// are ignored.
     ///
-    /// Geometry per the Figma layout (spec 20): the cannon-bubble center
-    /// sits 103pt above the scene's bottom edge, the queue-bubble center
-    /// 96pt further down, and the input area's bottom edge 64 logical units
-    /// above the cannon (unchanged from `GameLayout.fitting`'s own gap).
+    /// Geometry per the Figma layout (spec 20), raised per spec 31: the
+    /// cannon-bubble center sits 127pt above the scene's bottom edge (103pt
+    /// plus `cannonBlockLift`), the queue-bubble center 96pt further down
+    /// (31pt above the bottom edge), and the input area's bottom edge 64
+    /// logical units above the cannon (unchanged from `GameLayout.fitting`'s
+    /// own gap).
     func prepare(containerSize: CGSize) {
         guard engine == nil, containerSize.width > 0, containerSize.height > 0 else { return }
 
@@ -99,7 +119,7 @@ final class GameViewModel: ObservableObject {
         let areaHeight = Double(containerSize.height)
         let scale = areaWidth / GameConsts.boardLogicalWidth
         let canvasHeight = GameConsts.boardLogicalWidth * areaHeight / areaWidth
-        let cannonY = canvasHeight - 103 / scale
+        let cannonY = canvasHeight - (103 + Self.cannonBlockLift) / scale
         let queueY = cannonY + 96 / scale
         let cannonPivotX = GameConsts.boardMinX + GameConsts.boardLogicalWidth / 2
         let inputAreaMaxY = cannonY - 64
@@ -148,6 +168,10 @@ final class GameViewModel: ObservableObject {
         }
         scene.onGameOver = { [weak self] won, score, bonus, elapsedMs in
             guard let self else { return }
+            // Snap the game screen to invisible immediately (no animation)
+            // so it can't show through the game-over screen's own fade-in;
+            // `dismissGameOver()` is what animates it back (spec 31).
+            gameOpacity = 0
             withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
                 self.gameOver = GameOverInfo(won: won, score: score, bonus: bonus, elapsedMs: elapsedMs)
             }
@@ -186,7 +210,10 @@ final class GameViewModel: ObservableObject {
     }
 
     /// Restart button: reset the engine's board, dismiss any game-over
-    /// popup, and rebuild the scene's visuals to match.
+    /// popup, and rebuild the scene's visuals to match. Only reachable
+    /// during active play — the header sits behind the game-over screen
+    /// once it's showing — so there's no game-over screen to fade out here,
+    /// and `gameOpacity` is simply left at 1 (spec 31).
     func restart() {
         guard let engine, let scene else { return }
         engine.resetBoard()
@@ -196,9 +223,27 @@ final class GameViewModel: ObservableObject {
         scene.rebuild()
     }
 
-    /// OK button on the game-over popup: same effect as Restart.
+    /// OK button on the game-over popup. Unlike `restart()`, this sequences
+    /// the two screens explicitly (spec 31) instead of relying on the
+    /// freshly reset game scene showing through the game-over screen's own
+    /// fade-out: the game-over screen fades out over `gameOverFadeDuration`,
+    /// and only once that has fully elapsed does the game scene — already
+    /// reset, still sitting at `gameOpacity == 0` since `onGameOver` fired —
+    /// fade in over `gameFadeInDuration`.
     func dismissGameOver() {
-        restart()
+        guard let engine, let scene else { return }
+        engine.resetBoard()
+        scene.rebuild()
+        withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
+            gameOver = nil
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.gameOverFadeDuration * 1_000_000_000))
+            guard let self else { return }
+            withAnimation(.easeIn(duration: Self.gameFadeInDuration)) {
+                self.gameOpacity = 1
+            }
+        }
     }
 
     /// Called by `RootView` when `scenePhase` leaves `.active`. Saves only if

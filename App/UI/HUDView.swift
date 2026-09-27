@@ -12,7 +12,7 @@ struct HUDView: View {
     var body: some View {
         ZStack {
             HStack {
-                Text("\(score)")
+                Text(verbatim: String(score))
                     .font(.pretendardSemiBold(32))
                     .monospacedDigit()
                     .foregroundStyle(.white)
