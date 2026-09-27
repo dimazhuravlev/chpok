@@ -107,15 +107,11 @@ struct PaletteSheet: View {
     }
 
     private func swatch(for bubbleColor: BubbleColor, diameter: CGFloat) -> some View {
-        ZStack {
-            Circle()
-                .fill(Color(uiColor: store.color(for: bubbleColor)))
-                .frame(width: diameter, height: diameter)
-
-            ColorPickerAnchor(color: uiColorBinding(for: bubbleColor))
-                .frame(width: diameter, height: diameter)
-        }
-        .accessibilityIdentifier("paletteSwatch\(bubbleColor.rawValue)")
+        PaletteSwatch(
+            color: uiColorBinding(for: bubbleColor),
+            diameter: diameter,
+            identifier: "paletteSwatch\(bubbleColor.rawValue)"
+        )
     }
 
     private func uiColorBinding(for bubbleColor: BubbleColor) -> Binding<UIColor> {
@@ -123,6 +119,33 @@ struct PaletteSheet: View {
             get: { store.color(for: bubbleColor) },
             set: { store.setColor($0, for: bubbleColor) }
         )
+    }
+}
+
+/// One colour circle. Owns its own press state so the quick press scale
+/// (0.98 over 100ms, owner request) is per-swatch. The press signal comes
+/// from the anchor's raw touches rather than another gesture recognizer:
+/// a second recognizer here would compete with the tap recognizer that
+/// opens the picker, which is exactly what used to swallow the first tap.
+private struct PaletteSwatch: View {
+    @Binding var color: UIColor
+    let diameter: CGFloat
+    let identifier: String
+
+    @State private var isPressed = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color(uiColor: color))
+                .frame(width: diameter, height: diameter)
+
+            ColorPickerAnchor(color: $color, onPressChanged: { isPressed = $0 })
+                .frame(width: diameter, height: diameter)
+        }
+        .scaleEffect(isPressed ? 0.98 : 1)
+        .animation(.easeOut(duration: 0.1), value: isPressed)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -145,6 +168,7 @@ struct PaletteSheet: View {
 /// sheet's own layout is never touched.
 private struct ColorPickerAnchor: UIViewControllerRepresentable {
     @Binding var color: UIColor
+    var onPressChanged: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -152,6 +176,9 @@ private struct ColorPickerAnchor: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> AnchorViewController {
         let anchor = AnchorViewController()
+        anchor.onPressChanged = { pressed in
+            context.coordinator.parent.onPressChanged(pressed)
+        }
         anchor.onTap = { [weak anchor] in
             guard let anchor else { return }
             Haptics.shared.buttonTapped()
@@ -176,6 +203,13 @@ private struct ColorPickerAnchor: UIViewControllerRepresentable {
     /// recognizer and act as the popover's presenter/anchor.
     final class AnchorViewController: UIViewController {
         var onTap: (() -> Void)?
+        var onPressChanged: ((Bool) -> Void)?
+
+        override func loadView() {
+            let touchView = TouchReportingView()
+            touchView.onPressChanged = { [weak self] pressed in self?.onPressChanged?(pressed) }
+            view = touchView
+        }
 
         override func viewDidLoad() {
             super.viewDidLoad()
@@ -185,6 +219,28 @@ private struct ColorPickerAnchor: UIViewControllerRepresentable {
 
         @objc private func handleTap() {
             onTap?()
+        }
+    }
+
+    /// Reports raw touch down/up. The tap recognizer above has
+    /// `cancelsTouchesInView` on, so a recognised tap arrives here as
+    /// `touchesCancelled` — which releases the press scale just the same.
+    final class TouchReportingView: UIView {
+        var onPressChanged: ((Bool) -> Void)?
+
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            super.touchesBegan(touches, with: event)
+            onPressChanged?(true)
+        }
+
+        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+            super.touchesEnded(touches, with: event)
+            onPressChanged?(false)
+        }
+
+        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+            super.touchesCancelled(touches, with: event)
+            onPressChanged?(false)
         }
     }
 
