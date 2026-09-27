@@ -4,12 +4,17 @@ import SpriteKit
 struct RootView: View {
     @StateObject var vm = GameViewModel()
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var paletteStore = PaletteStore.shared
     /// Debug entry point: launching with `-showGameOverDemo` shows
     /// `GameOverScreen` immediately with sample data (score 47, time 2:47),
     /// so the fullscreen game-over look can be eyeballed without playing a
     /// match to the end. Tapping "new game" clears it and falls through to
     /// the normal game, same as a real game over.
     @State private var showGameOverDemo = CommandLine.arguments.contains("-showGameOverDemo")
+    /// Shown on shake (spec 32), but only during active play — the palette
+    /// sheet has no business appearing over the game-over screen, which has
+    /// its own dedicated full-screen presentation and transition.
+    @State private var showPaletteSheet = false
 
     var body: some View {
         ZStack {
@@ -65,6 +70,17 @@ struct RootView: View {
         .background(Color(Palette.background).ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { if $0 != .active { vm.persistIfPossible() } }
+        // Live repaint (spec 32 step 3): whenever the palette changes, push
+        // the new colors onto every bubble node that already exists instead
+        // of waiting for them to be recreated.
+        .onChange(of: paletteStore.colors) { _ in vm.scene?.repaintBubbles() }
+        .onShake {
+            guard vm.gameOver == nil else { return }
+            showPaletteSheet = true
+        }
+        .sheet(isPresented: $showPaletteSheet) {
+            PaletteSheet()
+        }
     }
 
     private func sceneContainerSize(for areaSize: CGSize) -> CGSize {

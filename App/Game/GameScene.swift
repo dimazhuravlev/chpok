@@ -328,4 +328,19 @@ final class GameScene: SKScene {
     func rebuild() {
         performBoardReset()
     }
+
+    /// Re-applies the current palette to every live bubble node — the
+    /// cannon-loaded ("ready"), queued, on-board, and any in-flight
+    /// ("launched") bubble alike (spec 32). `sync()` would eventually repaint
+    /// everything on its own next pass too (it calls `apply(color:)`
+    /// unconditionally every frame), but calling this explicitly when the
+    /// palette changes makes the repaint immediate and the dependency
+    /// intentional rather than incidental.
+    func repaintBubbles() {
+        let colorsById = Dictionary(uniqueKeysWithValues: engine.bubbles.map { ($0.id, $0.color) })
+        for (id, node) in nodes {
+            guard let bubbleNode = node as? BubbleNode, let color = colorsById[id] else { continue }
+            bubbleNode.apply(color: color)
+        }
+    }
 }
