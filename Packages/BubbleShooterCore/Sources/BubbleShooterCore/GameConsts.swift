@@ -69,7 +69,7 @@ public enum GameConsts {
     /// full collision/bounce check. The step must stay `launchPower` and
     /// must not grow — a bigger single step risks skipping straight past a
     /// neighbour before `collisionDistance` can register a hit (tunnelling).
-    public static let flightStepsPerTick: Double = 1.5
+    public static let flightStepsPerTick: Double = 1.2
     /// Fixed simulation tick, ms (see "Решённые развилки").
     public static let tickMs = 15
     /// `WIDTH` — logical canvas width, px (canvas height is layout-dependent,

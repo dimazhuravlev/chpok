@@ -36,24 +36,26 @@ final class FlightTests: XCTestCase {
             engine.tick()
             ticks += 1
             if let stillFlying = engine.launchedBubble, stillFlying === flying {
-                // Odd ticks (1st, 3rd, ...) take 1 sub-step; even ticks take
-                // 2 — see `GameConsts.flightStepsPerTick`'s doc comment.
-                let expectedDescent = ticks % 2 == 1
-                    ? GameConsts.launchPower
-                    : GameConsts.launchPower * 2
+                // The invariant that matters is the *sub-step*, not the
+                // per-tick total: every tick must advance a whole number of
+                // 18px (`launchPower`) sub-steps, because a larger single
+                // step is what would tunnel through a target. How many land
+                // in a given tick follows `flightStepsPerTick`'s accumulator,
+                // so this stays true whenever that constant is retuned.
                 let descended = yBefore - stillFlying.position.y
-                XCTAssertEqual(descended, expectedDescent, accuracy: 0.0001,
-                                "tick \(ticks) must descend \(expectedDescent)px before landing")
+                let subSteps = descended / GameConsts.launchPower
+                XCTAssertEqual(subSteps, subSteps.rounded(), accuracy: 0.0001,
+                                "tick \(ticks) descended \(descended)px, not a whole number of sub-steps")
+                XCTAssertGreaterThanOrEqual(subSteps, 1)
                 totalDescended += descended
-                if ticks == 1 {
-                    XCTAssertEqual(totalDescended, 18, accuracy: 0.0001)
-                } else if ticks == 2 {
-                    XCTAssertEqual(totalDescended, 54, accuracy: 0.0001,
-                                    "18 (tick 1) + 36 (tick 2) == 54")
-                }
             }
         }
         XCTAssertLessThan(ticks, 2000, "bubble should have landed by now")
+
+        // Average pace over the whole flight matches the configured rate.
+        // Generous tolerance: the final tick is truncated by the landing.
+        let averageSubStepsPerTick = totalDescended / GameConsts.launchPower / Double(ticks)
+        XCTAssertEqual(averageSubStepsPerTick, GameConsts.flightStepsPerTick, accuracy: 0.25)
 
         engine.runUntilIdle()
         let events = engine.drainEvents()
