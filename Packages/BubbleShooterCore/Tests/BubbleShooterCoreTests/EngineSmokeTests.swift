@@ -91,7 +91,13 @@ final class EngineSmokeTests: XCTestCase {
         XCTAssertEqual(GameConsts.narrowBoardWidth, 16)
         XCTAssertEqual(GameConsts.bubbleSize, 32)
         XCTAssertEqual(GameConsts.launchPower, 18)
-        XCTAssertEqual(GameConsts.collisionDistance, 24)
+        // Retuned from 24 to 21: the original paired a 24 threshold with a
+        // 32 row step (0.75 of it), but true hex packing put rows 27.71
+        // apart, which left bubbles catching ~15% earlier than intended and
+        // made aiming finicky. 21 restores roughly the original ratio.
+        // Must stay above the 18px flight sub-step or shots tunnel.
+        XCTAssertEqual(GameConsts.collisionDistance, 21)
+        XCTAssertGreaterThan(GameConsts.collisionDistance, GameConsts.launchPower)
         // Spec 13: derived from boardMinX/boardMaxX, no longer independent
         // magic numbers (37/561).
         XCTAssertEqual(GameConsts.boardMinX, 24)
