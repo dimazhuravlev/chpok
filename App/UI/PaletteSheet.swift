@@ -69,7 +69,7 @@ struct PaletteSheet: View {
             .opacity(store.isDefault ? 0.3 : 1.0)
             .accessibilityIdentifier("resetPaletteButton")
             .padding(.top, 32)
-            .padding(.bottom, 48)
+            .padding(.bottom, 0)
         }
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
