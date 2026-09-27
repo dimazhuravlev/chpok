@@ -53,7 +53,7 @@ struct PaletteSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             grid
-                .padding(.top, 24)
+                .padding(.top, 48)
 
             Button("reset colors") {
                 Haptics.shared.buttonTapped()
@@ -69,7 +69,7 @@ struct PaletteSheet: View {
             .opacity(store.isDefault ? 0.3 : 1.0)
             .accessibilityIdentifier("resetPaletteButton")
             .padding(.top, 32)
-            .padding(.bottom, 56)
+            .padding(.bottom, 48)
         }
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
