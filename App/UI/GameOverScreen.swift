@@ -46,6 +46,11 @@ struct GameOverScreen: View {
     /// Gap between the time line and the previous-best line (negative: see above).
     private static let timeToBestSpacing: CGFloat = -4.2
     /// Opacity of the white the previous-best line is set in (mockup: 0.40).
+    /// Opacity of the standing-record line, from the mockup. The text is
+    /// black rather than the mockup's white: the mockups only showed the
+    /// three darker palette colors, but the background cycles through all
+    /// six, and white drops to 1.7:1 contrast on the orange and 2.1:1 on
+    /// the cyan. Black stays between 4.7:1 and 12.2:1 on every one of them.
     private static let previousBestOpacity: Double = 0.4
 
     var body: some View {
@@ -56,7 +61,7 @@ struct GameOverScreen: View {
             VStack {
                 Text(info.title)
                     .font(.pretendardSemiBold(32))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.black)
                     .accessibilityIdentifier("gameOverTitle")
                     .padding(.top, Self.titleTopPadding)
 
@@ -67,7 +72,7 @@ struct GameOverScreen: View {
                     onNewGame()
                 }
                 .font(.pretendardSemiBold(32))
-                .foregroundStyle(.white)
+                .foregroundStyle(.black)
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("okButton")
                 .padding(.bottom, 32)
@@ -105,13 +110,13 @@ struct GameOverScreen: View {
                 // record yet means no line at all, not a placeholder.
                 if let bestText = info.bestText {
                     Text(verbatim: "best time \(bestText)")
-                        .foregroundStyle(Color.white.opacity(Self.previousBestOpacity))
+                        .foregroundStyle(Color.black.opacity(Self.previousBestOpacity))
                         .accessibilityIdentifier("gameOverBest")
                 }
             }
         }
         .font(.pretendardSemiBold(32))
-        .foregroundStyle(.white)
+        .foregroundStyle(.black)
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
