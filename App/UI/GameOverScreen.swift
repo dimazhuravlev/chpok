@@ -73,10 +73,11 @@ struct GameOverScreen: View {
                 .padding(.bottom, 32)
             }
 
-            // A loss leaves the middle of the screen empty (spec 36).
-            if info.won {
-                resultLines
-            }
+            // Score, time and the standing record show on both outcomes
+            // (owner request). `timeLabel` already guards the "new best
+            // time" wording behind a win, so a loss can only ever read
+            // "time".
+            resultLines
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("gameOverOverlay")
