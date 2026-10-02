@@ -67,7 +67,7 @@ final class GameViewModel: ObservableObject {
     /// Fade duration for the game-over screen's `.transition(.opacity)`,
     /// shared by every `gameOver`/`showGameOverDemo` mutation so the
     /// appear/disappear fades stay symmetric (spec 27).
-    static let gameOverFadeDuration: Double = 0.25
+    static let gameOverFadeDuration: Double = 0.5
     /// How long the game scene fades back in once the game-over screen has
     /// fully finished fading out (spec 31) — see `dismissGameOver()`, which
     /// starts this only after `gameOverFadeDuration` has elapsed so the two
