@@ -295,6 +295,15 @@ final class GameViewModel: ObservableObject {
         withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
             gameOver = nil
         }
+        fadeGameInAfterOverlay()
+    }
+
+    /// Second half of the game-over to game transition: wait out the
+    /// overlay's own fade, then bring the game screen back. Split out so the
+    /// debug demo can run the exact same sequence a player sees — dismissing
+    /// the demo used to only hide the overlay, leaving the game fully opaque
+    /// underneath, which made the transition look like it wasn't there.
+    func fadeGameInAfterOverlay() {
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.gameOverFadeDuration * 1_000_000_000))
             guard let self else { return }

@@ -62,9 +62,17 @@ struct RootView: View {
             if showGameOverDemo {
                 GameOverScreen(
                     info: GameOverInfo(won: true, score: 45062, bonus: 0, elapsedMs: 321_000, previousBestMs: 512_000),
-                    onNewGame: { withAnimation(.easeInOut(duration: GameViewModel.gameOverFadeDuration)) { showGameOverDemo = false } }
+                    onNewGame: {
+                        withAnimation(.easeInOut(duration: GameViewModel.gameOverFadeDuration)) {
+                            showGameOverDemo = false
+                        }
+                        vm.fadeGameInAfterOverlay()
+                    }
                 )
                 .transition(.opacity)
+                // Hide the game behind the demo the same way a real game
+                // over does, so dismissing it shows the real transition.
+                .onAppear { vm.gameOpacity = 0 }
             } else if let info = vm.gameOver {
                 GameOverScreen(info: info, onNewGame: vm.dismissGameOver)
                     .transition(.opacity)
