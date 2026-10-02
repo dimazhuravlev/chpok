@@ -10,23 +10,52 @@ struct GameOverInfo: Equatable {
     /// 22) — active (foreground-only) time, carried on `GameEvent.gameOver`
     /// so it doesn't keep growing while the popup is open.
     let elapsedMs: Int
+    /// The personal best winning time (spec 36) exactly as it stood *before*
+    /// this match — `nil` when there was no record yet. Never the time of the
+    /// match being shown: a win that sets a new record must still show the old
+    /// one, otherwise the line would just repeat `timeText`.
+    let previousBestMs: Int?
 
     var total: Int { score + bonus }
-    /// Lowercase with an exclamation mark, matching the rest of the
-    /// fullscreen game-over screen's typography (spec 26).
-    var title: String { won ? "you win!" : "you lose!" }
+    /// Lowercase and without an exclamation mark, matching the rest of the
+    /// fullscreen game-over screen's typography (spec 26; the "!" went away
+    /// with the spec 36 mockups).
+    var title: String { won ? "you win" : "you lose" }
 
-    /// `m:ss`, or `h:mm:ss` once the match runs an hour or more (spec 22).
-    /// Seconds (and minutes, once hours are shown) are always two digits.
-    var timeText: String {
-        let totalSeconds = elapsedMs / 1000
+    /// Whether this match set a new personal best: a win that is strictly
+    /// faster than the previous best, or any win when there was none yet (the
+    /// very first win is itself the record). A tie is not a new best — the
+    /// same rule `BestTimeStore.submit(_:)` applies when it decides to write.
+    /// A loss never is.
+    var isNewBest: Bool {
+        guard won else { return false }
+        guard let previousBestMs else { return true }
+        return elapsedMs < previousBestMs
+    }
+
+    /// Label of the time line (spec 36): `new best time` when this match set
+    /// the record, plain `time` otherwise.
+    var timeLabel: String { isNewBest ? "new best time" : "time" }
+
+    /// `MM:SS` (minutes always two digits), or `H:MM:SS` once the match runs
+    /// an hour or more (spec 22, minutes zero-padded since spec 36). Seconds
+    /// (and minutes, once hours are shown) are always two digits.
+    var timeText: String { Self.formatTime(elapsedMs) }
+
+    /// The previous personal best in the same format as `timeText`; `nil` when
+    /// there is none, in which case the screen omits the line entirely.
+    var bestText: String? { previousBestMs.map(Self.formatTime) }
+
+    /// Shared by `timeText` and `bestText` so the two lines can't drift apart.
+    private static func formatTime(_ ms: Int) -> String {
+        let totalSeconds = ms / 1000
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
         let seconds = totalSeconds % 60
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         }
-        return String(format: "%d:%02d", minutes, seconds)
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
 
@@ -73,13 +102,18 @@ final class GameViewModel: ObservableObject {
 
     /// Persists/restores the in-progress match; see `GameSaveStore`.
     let store: GameSaveStore
+    /// The personal best winning time (spec 36); see `BestTimeStore`. Kept
+    /// apart from `store` on purpose — the match save is cleared at the end of
+    /// every match, the record must survive that.
+    let bestTimeStore: BestTimeStore
 
     var makeEngine: (GameLayout) -> GameEngine
     var onTurnResolved: ((GameEngine) -> Void)?
     var onGameOverHook: ((GameEngine) -> Void)?
 
-    init(store: GameSaveStore = GameSaveStore()) {
+    init(store: GameSaveStore = GameSaveStore(), bestTimeStore: BestTimeStore = BestTimeStore()) {
         self.store = store
+        self.bestTimeStore = bestTimeStore
         makeEngine = { layout in
             if let snapshot = store.load() {
                 return GameEngine(snapshot: snapshot, layout: layout)
@@ -116,6 +150,7 @@ final class GameViewModel: ObservableObject {
 
         if CommandLine.arguments.contains("-resetSave") {
             store.clear()
+            bestTimeStore.clear()
         }
 
         let areaWidth = Double(containerSize.width)
@@ -179,12 +214,24 @@ final class GameViewModel: ObservableObject {
         }
         scene.onGameOver = { [weak self] won, score, bonus, elapsedMs in
             guard let self else { return }
+            // Order matters (spec 36): read the record into the info FIRST,
+            // and only then offer this match's time to the store. The screen
+            // shows the best as it was before this match; swap the two steps
+            // and a win would show its own, just-stored time as the "best".
+            // Only wins can set a record — see `BestTimeStore`.
+            let info = GameOverInfo(
+                won: won, score: score, bonus: bonus, elapsedMs: elapsedMs,
+                previousBestMs: bestTimeStore.load()
+            )
+            if won {
+                bestTimeStore.submit(elapsedMs)
+            }
             // Snap the game screen to invisible immediately (no animation)
             // so it can't show through the game-over screen's own fade-in;
             // `dismissGameOver()` is what animates it back (spec 31).
             gameOpacity = 0
             withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
-                self.gameOver = GameOverInfo(won: won, score: score, bonus: bonus, elapsedMs: elapsedMs)
+                self.gameOver = info
             }
             updateStatus()
             if let engine {

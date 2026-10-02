@@ -6,10 +6,11 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var paletteStore = PaletteStore.shared
     /// Debug entry point: launching with `-showGameOverDemo` shows
-    /// `GameOverScreen` immediately with sample data (score 47, time 2:47),
-    /// so the fullscreen game-over look can be eyeballed without playing a
-    /// match to the end. Tapping "new game" clears it and falls through to
-    /// the normal game, same as a real game over.
+    /// `GameOverScreen` immediately with sample data — the "win with a new
+    /// record" mockup of spec 36 (score 45062, time 05:21, previous best
+    /// 08:32) — so the fullscreen game-over look can be eyeballed without
+    /// playing a match to the end. Tapping "new game" clears it and falls
+    /// through to the normal game, same as a real game over.
     @State private var showGameOverDemo = CommandLine.arguments.contains("-showGameOverDemo")
     /// Shown on shake (spec 32), but only during active play — the palette
     /// sheet has no business appearing over the game-over screen, which has
@@ -58,7 +59,7 @@ struct RootView: View {
 
             if showGameOverDemo {
                 GameOverScreen(
-                    info: GameOverInfo(won: true, score: 47, bonus: 0, elapsedMs: 167_000),
+                    info: GameOverInfo(won: true, score: 45062, bonus: 0, elapsedMs: 321_000, previousBestMs: 512_000),
                     onNewGame: { withAnimation(.easeInOut(duration: GameViewModel.gameOverFadeDuration)) { showGameOverDemo = false } }
                 )
                 .transition(.opacity)
