@@ -51,7 +51,7 @@ struct GameOverScreen: View {
     /// three darker palette colors, but the background cycles through all
     /// six, and white drops to 1.7:1 contrast on the orange and 2.1:1 on
     /// the cyan. Black stays between 4.7:1 and 12.2:1 on every one of them.
-    private static let previousBestOpacity: Double = 0.4
+    private static let previousBestOpacity: Double = 0.3
 
     var body: some View {
         ZStack {
