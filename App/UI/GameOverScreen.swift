@@ -4,13 +4,11 @@ import BubbleShooterCore
 /// Full-screen game-over screen (spec 26, reworked to the owner's mockups in
 /// spec 36): the background pulses through all six bubble colors, and the
 /// content is the win/lose title at the top, the new-game button at the
-/// bottom and — on a win only — the result lines at the center of the screen:
+/// bottom and the result lines at the center of the screen:
 /// `score N`, then the time (`new best time` when this match set the personal
 /// best, plain `time` otherwise), then the *previous* best muted underneath
-/// for comparison (nothing when there was none). A loss shows only the title
-/// and the button. All text is white: the mockups set it that way, trading the
-/// readability spec 26 bought with black text (white is ~1.7:1 on the lighter
-/// palette colors) for the look the owner drew.
+/// for comparison (nothing when there was none). Both outcomes show the
+/// result lines; only the "new best time" wording is reserved for a win.
 struct GameOverScreen: View {
     let info: GameOverInfo
     let onNewGame: () -> Void
@@ -45,12 +43,7 @@ struct GameOverScreen: View {
     private static let scoreToTimeSpacing: CGFloat = 18.6
     /// Gap between the time line and the previous-best line (negative: see above).
     private static let timeToBestSpacing: CGFloat = -4.2
-    /// Opacity of the white the previous-best line is set in (mockup: 0.40).
-    /// Opacity of the standing-record line, from the mockup. The text is
-    /// black rather than the mockup's white: the mockups only showed the
-    /// three darker palette colors, but the background cycles through all
-    /// six, and white drops to 1.7:1 contrast on the orange and 2.1:1 on
-    /// the cyan. Black stays between 4.7:1 and 12.2:1 on every one of them.
+    /// Opacity of the standing-record line.
     private static let previousBestOpacity: Double = 0.3
 
     var body: some View {

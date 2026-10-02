@@ -12,6 +12,8 @@ struct RootView: View {
     /// playing a match to the end. Tapping "new game" clears it and falls
     /// through to the normal game, same as a real game over.
     @State private var showGameOverDemo = CommandLine.arguments.contains("-showGameOverDemo")
+
+    private var isShowingGameOver: Bool { showGameOverDemo || vm.gameOver != nil }
     /// Shown on shake (spec 32), but only during active play — the palette
     /// sheet has no business appearing over the game-over screen, which has
     /// its own dedicated full-screen presentation and transition.
@@ -69,7 +71,9 @@ struct RootView: View {
             }
         }
         .background(Color(Palette.background).ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        // The game screen is black, so it wants light status-bar content;
+        // the game-over screen is a light palette color and wants dark.
+        .preferredColorScheme(isShowingGameOver ? .light : .dark)
         .onChange(of: scenePhase) { if $0 != .active { vm.persistIfPossible() } }
         // Live repaint (spec 32 step 3): whenever the palette changes, push
         // the new colors onto every bubble node that already exists instead
