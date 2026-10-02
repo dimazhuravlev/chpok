@@ -20,7 +20,7 @@ struct GameOverInfo: Equatable {
     /// Lowercase and without an exclamation mark, matching the rest of the
     /// fullscreen game-over screen's typography (spec 26; the "!" went away
     /// with the spec 36 mockups).
-    var title: String { won ? "you win" : "you lose" }
+    var title: String { won ? "you win!" : "you lose!" }
 
     /// Whether this match set a new personal best: a win that is strictly
     /// faster than the previous best, or any win when there was none yet (the
