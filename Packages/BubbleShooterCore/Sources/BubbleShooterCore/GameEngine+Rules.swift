@@ -367,6 +367,15 @@ extension GameEngine {
             }
         }
 
+        // The match is confirmed and every removal is queued: announce the
+        // whole cluster once, here, so the event lands before the first
+        // `.removed` (index 0 has a zero delay and fires later this very
+        // tick). Skipped once the game is over — `performRemoval` is a no-op
+        // then, so the cluster would be announced but never actually removed.
+        if let first = toBeRemovedArr.first, !isGameOver {
+            events.append(.clusterMatched(ids: toBeRemovedArr.map(\.id), color: first.color))
+        }
+
         if toBeRemovedCount < 3 {
             for b in bubbles {
                 b.markedToBeRemoved = false

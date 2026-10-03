@@ -15,6 +15,16 @@ public enum GameEvent: Equatable {
     /// Fired at the moment of actual removal (mirrors `Bubble.remove`), not
     /// at the moment a bubble is merely marked for removal.
     case removed(id: Int, color: BubbleColor, position: Vec2, points: Int, reason: RemovalReason)
+    /// Fired once per confirmed match (a same-color cluster of three or
+    /// more), at the moment the per-bubble removals are scheduled — i.e.
+    /// before the first of the matching `.removed(reason: .match)` events.
+    /// `ids` lists every bubble of the cluster, including the one just fired,
+    /// in the order they will be removed; `color` is the cluster's color
+    /// (a cluster is always a single color). The removals themselves are
+    /// staggered over time (`GameConsts.removalStaggerMs` apart), so this is
+    /// the only point where a consumer learns about the whole cluster at once.
+    /// Purely informational: it changes no rules, timing or scoring.
+    case clusterMatched(ids: [Int], color: BubbleColor)
     case scoreChanged(score: Int)
     case lifeLost(livesLeft: Int)
     case livesReset(livesLeft: Int, maxLives: Int)

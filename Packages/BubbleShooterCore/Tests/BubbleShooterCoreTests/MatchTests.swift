@@ -80,4 +80,72 @@ final class MatchTests: XCTestCase {
             XCTAssertEqual(engine.score, expectedTotalByClusterSize[clusterSize])
         }
     }
+
+    // (c) spec 37: a confirmed match is announced once, as a whole, before
+    // the staggered per-bubble removals begin; a miss announces nothing.
+    func testClusterMatchedAnnouncedBeforeRemovals() {
+        // Same board as (a): red at columns 7,8,9 in row 0, blue elsewhere;
+        // a red shot straight up joins the trio into a 4-cluster.
+        var board: [GameSnapshot.BubbleRecord] = []
+        for col in 0...16 {
+            let color: BubbleColor = (7...9).contains(col) ? .red : .blue
+            board.append(GameSnapshot.BubbleRecord(boardX: col, boardY: 0, color: color))
+        }
+        let engine = GameEngine(board: board, readyColor: .red, queueColor: .blue, random: SeededGameRandom(seed: 1))
+        engine.advance(ms: 600)
+        guard let firedId = engine.readyBubble?.id else {
+            XCTFail("expected a ready bubble")
+            return
+        }
+
+        XCTAssertTrue(engine.fire(angleDegrees: 0))
+        engine.runUntilIdle()
+        let events = engine.drainEvents()
+
+        let announcements: [(index: Int, ids: [Int], color: BubbleColor)] = events.enumerated().compactMap { index, event in
+            if case let .clusterMatched(ids, color) = event { return (index, ids, color) }
+            return nil
+        }
+        let removals: [(index: Int, id: Int)] = events.enumerated().compactMap { index, event in
+            if case let .removed(id, _, _, _, reason) = event, reason == .match { return (index, id) }
+            return nil
+        }
+
+        XCTAssertEqual(removals.count, 4)
+        XCTAssertEqual(announcements.count, 1, "exactly one clusterMatched per match: \(events)")
+        guard let announcement = announcements.first, let firstRemoval = removals.map(\.index).min() else {
+            XCTFail("expected an announcement and removals: \(events)")
+            return
+        }
+
+        XCTAssertEqual(Set(announcement.ids), Set(removals.map(\.id)), "the announced ids are exactly the removed ones")
+        XCTAssertEqual(announcement.ids.count, removals.count, "no id is announced twice")
+        XCTAssertEqual(announcement.ids, removals.map(\.id), "ids come in removal order")
+        XCTAssertTrue(announcement.ids.contains(firedId), "the fired bubble belongs to the cluster")
+        XCTAssertEqual(announcement.color, .red)
+        XCTAssertLessThan(announcement.index, firstRemoval, "announced before the first .removed")
+
+        // Misses: a lone bubble (blue shot onto an all-red row) and a pair
+        // (red shot next to a single red) — both under the three-bubble
+        // threshold, so no match and no announcement.
+        let redRow = (0...16).map { GameSnapshot.BubbleRecord(boardX: $0, boardY: 0, color: .red) }
+        let singleRed = [GameSnapshot.BubbleRecord(boardX: 8, boardY: 0, color: .red)]
+        let misses: [(name: String, board: [GameSnapshot.BubbleRecord], ready: BubbleColor)] = [
+            ("cluster of one", redRow, .blue),
+            ("cluster of two", singleRed, .red)
+        ]
+        for miss in misses {
+            let missEngine = GameEngine(board: miss.board, readyColor: miss.ready, queueColor: .green, random: SeededGameRandom(seed: 1))
+            missEngine.advance(ms: 600)
+            XCTAssertTrue(missEngine.fire(angleDegrees: 0), miss.name)
+            missEngine.runUntilIdle()
+            let missEvents = missEngine.drainEvents()
+
+            XCTAssertTrue(missEvents.contains(.lifeLost(livesLeft: 4)), "\(miss.name) must be a miss: \(missEvents)")
+            XCTAssertFalse(
+                missEvents.contains { if case .clusterMatched = $0 { return true }; return false },
+                "\(miss.name): a miss must not announce a cluster: \(missEvents)"
+            )
+        }
+    }
 }
