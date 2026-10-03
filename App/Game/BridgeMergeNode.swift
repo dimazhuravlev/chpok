@@ -1,3 +1,4 @@
+import CoreImage.CIFilterBuiltins
 import SpriteKit
 import UIKit
 import BubbleShooterCore
@@ -97,16 +98,48 @@ enum BridgeShape {
 /// the same up to rotation: the growth frames are drawn once, for a horizontal
 /// pair, and shared by all bridges of all effects.
 ///
-/// The dissolve darkens the tint of every part to black rather than lowering
-/// opacity. SpriteKit applies opacity to each node separately, so wherever a
-/// bridge tucks under a circle the overlap would show through as a denser
-/// patch while fading. The background under a cluster is pure black, so
-/// tinting everything to black looks the same as a group fade, minus the
-/// artifact.
+/// The dissolve (spec 39) is two things at once: the tint of every part
+/// darkens to black, and the figure blurs.
+///
+/// The darkening lowers the tint rather than the opacity. SpriteKit applies
+/// opacity to each node separately, so wherever a bridge tucks under a circle
+/// the overlap would show through as a denser patch while fading. The
+/// background under a cluster is pure black, so tinting everything to black
+/// looks the same as a group fade, minus the artifact.
+///
+/// The blur is applied to the figure as one image, circles and bridges
+/// together, which is why the node is an `SKEffectNode`: parts blurred one by
+/// one would leave dark seams where a bridge goes under a circle. The filter
+/// chain is a single `CIGaussianBlur` and nothing else — a filter that makes
+/// the output extent infinite (a clamp, a color matrix without a crop) takes
+/// Metal down, as it did in spec 37. The effect is off for the growth and the
+/// pause, so those render as plain sprites with no offscreen buffer, and
+/// switches on at the first frame of the dissolve. Its glow falls into the
+/// gaps between neighbouring bubbles; the layer stays below the bubbles at
+/// rest, so it never paints over them.
+///
+/// An effect node renders its children into a buffer at one pixel per *local*
+/// unit, then draws the buffer scaled like any other node — so at the scene's
+/// own scale (a couple of device pixels per logical unit) the figure would
+/// turn visibly soft the moment the effect switches on. Same trick as spec 37:
+/// the layer is shrunk by `pixelsPerUnit` and everything inside is enlarged by
+/// the same factor — positions, bubble and bridge scale, blur radius, margin —
+/// so the buffer holds about one pixel per device pixel while the size and
+/// position of every part on screen stay put.
+///
+/// The buffer is cut to the bounds of the children and a blur runs into its
+/// edge, shearing the figure off with a straight line. A transparent spacer
+/// sprite, larger than the cluster by `bufferMargin` all around, keeps the
+/// edge out of reach.
+///
+/// The first CI blur of a launch stalls for a few hundred milliseconds while
+/// the filter pipeline is set up; `warmUp(in:pixelsPerUnit:)` pays that once,
+/// off screen, after the game has finished fading in.
 ///
 /// Add the node to the scene at the origin: the bubble nodes are re-parented
-/// into it and keep their scene positions.
-final class BridgeMergeNode: SKNode {
+/// into it and keep their scene positions (see `init` for the scale the node
+/// applies to itself internally).
+final class BridgeMergeNode: SKEffectNode {
     // MARK: - Tuning (spec 38)
     //
     // Every number of the effect lives here, side by side, so it can be
@@ -114,7 +147,7 @@ final class BridgeMergeNode: SKNode {
     // (a bubble is 30 across), durations in seconds.
 
     /// Largest opening `v` a bridge reaches (see `BridgeShape`).
-    static let bridgeSpread: CGFloat = 0.4
+    static let bridgeSpread: CGFloat = 0.35
     /// Length of the Bézier handles, relative to the bubble radius.
     static let handleSize: CGFloat = 2.4
     /// How long one bridge takes to grow, eased in and out.
@@ -128,6 +161,14 @@ final class BridgeMergeNode: SKNode {
     static let holdAfterBridges: TimeInterval = 0.1
     /// How long the dissolve takes, eased in and out.
     static let fadeDuration: TimeInterval = 0.3
+    /// Blur radius the dissolve ends at (spec 39), logical units. It eases out
+    /// over the dissolve, so it builds up a little ahead of the darkening and
+    /// can actually be seen.
+    static let maxBlurRadius: CGFloat = 5
+    /// Empty space kept around the figure inside the effect's buffer, logical
+    /// units (see the class comment). Must comfortably exceed 3 ×
+    /// `maxBlurRadius`, the reach of the blur kernel.
+    static let bufferMargin: CGFloat = 24
     /// Number of pre-drawn growth frames (`v` from 0 to `bridgeSpread`).
     static let bridgeTextureSteps = 24
     /// Two bubbles are neighbours when their centers are closer than this
@@ -231,13 +272,20 @@ final class BridgeMergeNode: SKNode {
     private let bridgesDoneAt: TimeInterval
     /// Darkening currently applied to the tint, 0...1.
     private var appliedDark: CGFloat = 0
+    /// Blur radius currently applied, logical units.
+    private var appliedRadius: CGFloat = 0
+    /// Device pixels per logical unit. See the class comment.
+    private let pixelsPerUnit: CGFloat
+    private let blurFilter = CIFilter.gaussianBlur()
     private let animationKey = "bridgeMerge"
 
     /// Takes over `bubbles` — the nodes of one matched cluster, all of one
     /// color, at their final scene positions — re-parenting them into the
-    /// effect. The bridge wave starts at `bubbles[startIndex]`.
-    init(bubbles: [BubbleNode], startIndex: Int, color: UIColor) {
+    /// effect. The bridge wave starts at `bubbles[startIndex]`. `pixelsPerUnit`
+    /// is the density the scene is shown at (device pixels per logical unit).
+    init(bubbles: [BubbleNode], startIndex: Int, color: UIColor, pixelsPerUnit: CGFloat) {
         self.bubbles = bubbles
+        self.pixelsPerUnit = max(1, pixelsPerUnit)
         let hex = color.opaqueHexValue
         red = CGFloat((hex >> 16) & 0xFF) / 255
         green = CGFloat((hex >> 8) & 0xFF) / 255
@@ -253,24 +301,55 @@ final class BridgeMergeNode: SKNode {
         super.init()
         zPosition = Self.layerZPosition
 
+        // The layer is shrunk by `unit` and everything inside is enlarged by
+        // it (see the class comment): on screen nothing changes size or place.
+        let unit = self.pixelsPerUnit
+        setScale(1 / unit)
+
+        // The blur, off until the dissolve starts: no buffer, no filter, the
+        // children are drawn straight to the screen. No cached rasterization
+        // either — the radius changes every frame.
+        blurFilter.radius = 0
+        filter = blurFilter
+        shouldEnableEffects = false
+        shouldRasterize = false
+
+        var bounds = CGRect.null
         for bubble in bubbles {
+            bounds = bounds.union(CGRect(
+                x: bubble.frame.minX * unit, y: bubble.frame.minY * unit,
+                width: bubble.frame.width * unit, height: bubble.frame.height * unit
+            ))
             // The layer sits at the origin, so scene positions carry over
-            // unchanged; no scale is applied. The ring goes for the duration:
-            // the figure is drawn in one flat color.
+            // once converted to its pixel space. The ring goes for the
+            // duration: the figure is drawn in one flat color.
             bubble.removeFromParent()
+            bubble.position = CGPoint(x: bubble.position.x * unit, y: bubble.position.y * unit)
+            bubble.setScale(unit)
             bubble.zPosition = Self.circleZPosition
             bubble.setBorderHidden(true)
             addChild(bubble)
         }
 
+        if !bounds.isNull {
+            // The buffer is sized to the children's bounds, and the bubbles
+            // touch them; see the class comment.
+            let padded = bounds.insetBy(dx: -Self.bufferMargin * unit, dy: -Self.bufferMargin * unit)
+            let spacer = SKSpriteNode(color: .clear, size: padded.size)
+            spacer.position = CGPoint(x: padded.midX, y: padded.midY)
+            addChild(spacer)
+        }
+
         let growth = Self.growth
         for (order, edge) in edges.enumerated() {
+            // The bubbles are in pixel space by now, and so is the bridge.
             let from = bubbles[edge.a].position
             let to = bubbles[edge.b].position
             let sprite = SKSpriteNode(texture: growth.frames[0], color: color, size: growth.size)
             sprite.colorBlendFactor = 1
             sprite.position = CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
             sprite.zRotation = atan2(to.y - from.y, to.x - from.x)
+            sprite.setScale(unit)
             sprite.zPosition = Self.bridgeZPosition
             sprite.isHidden = true
             addChild(sprite)
@@ -340,6 +419,35 @@ final class BridgeMergeNode: SKNode {
         return ordered
     }
 
+    // MARK: - Warm-up
+
+    private static var isWarm = false
+
+    /// Renders a throwaway layer once, off screen, so the one-time cost of
+    /// setting up the blur pipeline — a stall of a few hundred milliseconds on
+    /// a cold start, which at the first match of a session would swallow the
+    /// whole dissolve — is paid up front instead of in the middle of the first
+    /// pop. It must not run before the first frame (the stall would show as a
+    /// black screen at launch): the scene schedules it for after the game has
+    /// faded in. Runs only once per launch, and not at all if a real dissolve
+    /// got there first (`render` sets the flag too). Pass the view the scene
+    /// is shown in and its density.
+    static func warmUp(in view: SKView, pixelsPerUnit: CGFloat) {
+        guard !isWarm else { return }
+        isWarm = true
+
+        let layer = BridgeMergeNode(
+            bubbles: [BubbleNode(color: .blue)], startIndex: 0, color: .black, pixelsPerUnit: pixelsPerUnit
+        )
+        // Mid-dissolve: a blur of radius zero is skipped, the real kernels
+        // only run once the radius is above it.
+        layer.render(at: holdAfterBridges + fadeDuration / 2)
+        // `texture(from:)` draws the node tree right away; asking for the
+        // image makes sure the work has actually happened by the time we
+        // return.
+        _ = view.texture(from: layer)?.cgImage()
+    }
+
     // MARK: - Animation
 
     /// Runs growth, hold and dissolve (all stretched by `timeScale`) as one
@@ -353,8 +461,8 @@ final class BridgeMergeNode: SKNode {
         run(SKAction.sequence([animate, SKAction.run(completion)]), withKey: animationKey)
     }
 
-    /// Sets every bridge's growth frame and the figure's tint for the moment
-    /// `time` seconds (before `timeScale`) into the effect.
+    /// Sets every bridge's growth frame, the figure's tint and the blur for
+    /// the moment `time` seconds (before `timeScale`) into the effect.
     private func render(at time: TimeInterval) {
         let top = Self.growth.frames.count - 1
         for index in bridges.indices {
@@ -373,7 +481,19 @@ final class BridgeMergeNode: SKNode {
         }
 
         let dissolveStart = bridgesDoneAt + Self.holdAfterBridges
-        let dark = Self.smooth(CGFloat((time - dissolveStart) / Self.fadeDuration))
+        let dissolve = min(1, max(0, CGFloat((time - dissolveStart) / Self.fadeDuration)))
+
+        // The blur gets ahead of the darkening, so it can be seen. Effects are
+        // on from the first frame of the dissolve and not before.
+        let radius = Self.maxBlurRadius * Self.easeOut(dissolve)
+        if radius != appliedRadius {
+            appliedRadius = radius
+            blurFilter.radius = Float(radius * pixelsPerUnit)
+            shouldEnableEffects = radius > 0
+            if radius > 0 { Self.isWarm = true }
+        }
+
+        let dark = Self.smooth(dissolve)
         guard dark != appliedDark else { return }
         appliedDark = dark
         let tint = UIColor(red: red * (1 - dark), green: green * (1 - dark), blue: blue * (1 - dark), alpha: 1)
@@ -385,5 +505,11 @@ final class BridgeMergeNode: SKNode {
     private static func smooth(_ t: CGFloat) -> CGFloat {
         let clamped = min(1, max(0, t))
         return clamped * clamped * (3 - 2 * clamped)
+    }
+
+    /// Quadratic ease-out clamped to 0...1: fast start, slow end.
+    private static func easeOut(_ t: CGFloat) -> CGFloat {
+        let clamped = min(1, max(0, t))
+        return 1 - (1 - clamped) * (1 - clamped)
     }
 }

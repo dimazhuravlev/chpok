@@ -73,6 +73,10 @@ final class GameScene: SKScene {
     /// Id of the bubble that landed most recently — the one the player fired,
     /// and so where a match's bridge wave starts.
     private var lastLandedId: Int?
+    /// How long after the scene appears the blur warm-up runs (spec 39): the
+    /// game's launch fade-in, plus a little margin, so the stall of the first
+    /// CI blur never lands on the fade or on the first frames of play.
+    private let bridgeWarmUpDelay: TimeInterval = GameViewModel.gameFadeInDuration + 0.4
 
     var onScoreChanged: ((Int) -> Void)?
     var onGameOver: ((Bool, Int, Int, Int) -> Void)?
@@ -92,6 +96,20 @@ final class GameScene: SKScene {
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMove(to view: SKView) {
+        // Spec 39: pay the dissolve blur's one-time setup cost while the
+        // player is looking at the board, not in the middle of the first pop.
+        // Deferred, never synchronous: a synchronous warm-up here holds the
+        // first frame back by ~0.6 s (see `BridgeMergeNode.warmUp`).
+        run(SKAction.sequence([
+            SKAction.wait(forDuration: bridgeWarmUpDelay),
+            SKAction.run { [weak self] in
+                guard let self, let view = self.view else { return }
+                BridgeMergeNode.warmUp(in: view, pixelsPerUnit: self.pixelsPerUnit)
+            }
+        ]), withKey: "bridgeWarmUp")
     }
 
     // MARK: - Touches
@@ -304,6 +322,16 @@ final class GameScene: SKScene {
         }
     }
 
+    /// Device pixels per logical scene unit: how many pixels one scene unit
+    /// takes on screen — the `.aspectFit` scale of the scene inside its view,
+    /// times the view's pixel density — or 1 before the scene is presented.
+    /// The merge layer renders at this density (see `BridgeMergeNode`).
+    private var pixelsPerUnit: CGFloat {
+        guard let view, size.width > 0, size.height > 0 else { return 1 }
+        let fit = min(view.bounds.width / size.width, view.bounds.height / size.height)
+        return max(1, fit * view.contentScaleFactor)
+    }
+
     /// Spec 38: hands a freshly matched cluster over to a `BridgeMergeNode`.
     /// The nodes of every listed bubble move into the effect layer (keeping
     /// their positions), lose their pending move/fade actions and stored
@@ -345,7 +373,9 @@ final class GameScene: SKScene {
         }
         guard !members.isEmpty else { return }
 
-        let layer = BridgeMergeNode(bubbles: members, startIndex: startIndex, color: Palette.color(for: color))
+        let layer = BridgeMergeNode(
+            bubbles: members, startIndex: startIndex, color: Palette.color(for: color), pixelsPerUnit: pixelsPerUnit
+        )
         addChild(layer)
         mergeLayers.append(layer)
         layer.play { [weak self, weak layer] in
