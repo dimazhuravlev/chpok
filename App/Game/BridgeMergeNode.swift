@@ -151,23 +151,21 @@ final class BridgeMergeNode: SKEffectNode {
     /// Length of the Bézier handles, relative to the bubble radius.
     static let handleSize: CGFloat = 2.4
     /// How long one bridge takes to grow, eased in and out.
-    static let bridgeGrowDuration: TimeInterval = 0.22
-    /// Largest delay between the starts of two consecutive bridges.
-    static let edgeStaggerMax: TimeInterval = 0.07
-    /// The whole wave (first start to last start) never spreads over more
-    /// than this, so a big cluster does not drag on for seconds.
-    static let maxWaveSpread: TimeInterval = 0.45
+    static let bridgeGrowDuration: TimeInterval = 0.30
+    /// Delay between the starts of two consecutive bridges. Constant: a big
+    /// cluster simply has a long wave.
+    static let edgeStagger: TimeInterval = 0.09
     /// Pause between the last bridge completing and the dissolve starting.
     static let holdAfterBridges: TimeInterval = 0.1
     /// How long the dissolve takes. The blur eases out, the darkening starts
     /// late (see `darkeningDelay`) and is eased in and out. Long enough for
     /// the cloud to be seen.
     static let fadeDuration: TimeInterval = 0.45
-    /// Blur radius the dissolve ends at (specs 39, 40), logical units: about a
-    /// bubble's own radius, so the figure turns into a cloud rather than a
-    /// soft-edged shape. It eases out over the dissolve, so the figure spreads
+    /// Blur radius the dissolve ends at (specs 39, 40, 41), logical units: well
+    /// over a bubble's own radius, so the figure turns into a cloud rather than
+    /// a soft-edged shape. It eases out over the dissolve, so the figure spreads
     /// quickly and then keeps thinning out.
-    static let maxBlurRadius: CGFloat = 16
+    static let maxBlurRadius: CGFloat = 25
     /// Share of the dissolve (0...1) during which the figure only blurs and
     /// keeps its brightness; the darkening is squeezed into the rest.
     static let darkeningDelay: CGFloat = 0.25
@@ -175,9 +173,9 @@ final class BridgeMergeNode: SKEffectNode {
     /// units (see the class comment). Must be at least 3 × `maxBlurRadius`,
     /// the reach of the blur kernel, or the cloud is cut off by a straight
     /// line at the buffer's edge.
-    static let bufferMargin: CGFloat = 56
+    static let bufferMargin: CGFloat = 85
     /// Number of pre-drawn growth frames (`v` from 0 to `bridgeSpread`).
-    static let bridgeTextureSteps = 24
+    static let bridgeTextureSteps = 36
     /// Two bubbles are neighbours when their centers are closer than this
     /// many bubble sizes (the grid's next-nearest pair is ~1.73 away).
     static let neighbourDistanceFactor: CGFloat = 1.2
@@ -302,8 +300,7 @@ final class BridgeMergeNode: SKEffectNode {
             positions: bubbles.map(\.position),
             startIndex: startIndex
         )
-        let stagger = min(Self.edgeStaggerMax, Self.maxWaveSpread / Double(max(1, edges.count - 1)))
-        bridgesDoneAt = edges.isEmpty ? 0 : Double(edges.count - 1) * stagger + Self.bridgeGrowDuration
+        bridgesDoneAt = edges.isEmpty ? 0 : Double(edges.count - 1) * Self.edgeStagger + Self.bridgeGrowDuration
 
         super.init()
         zPosition = Self.layerZPosition
@@ -360,7 +357,7 @@ final class BridgeMergeNode: SKEffectNode {
             sprite.zPosition = Self.bridgeZPosition
             sprite.isHidden = true
             addChild(sprite)
-            bridges.append(Bridge(sprite: sprite, start: Double(order) * stagger, shownFrame: -1))
+            bridges.append(Bridge(sprite: sprite, start: Double(order) * Self.edgeStagger, shownFrame: -1))
         }
     }
 
