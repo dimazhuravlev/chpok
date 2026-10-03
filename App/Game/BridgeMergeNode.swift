@@ -159,7 +159,8 @@ final class BridgeMergeNode: SKEffectNode {
     static let maxWaveSpread: TimeInterval = 0.45
     /// Pause between the last bridge completing and the dissolve starting.
     static let holdAfterBridges: TimeInterval = 0.1
-    /// How long the dissolve takes, eased in and out.
+    /// How long the dissolve takes. The darkening is eased in and out, the
+    /// blur eased out (see `maxBlurRadius`).
     static let fadeDuration: TimeInterval = 0.3
     /// Blur radius the dissolve ends at (spec 39), logical units. It eases out
     /// over the dissolve, so it builds up a little ahead of the darkening and
