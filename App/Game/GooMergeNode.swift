@@ -42,15 +42,22 @@ final class GooMergeNode: SKEffectNode {
 
     /// First phase: the blur radius grows from 0 to `maxBlurRadius` and the
     /// bubbles drift `mergePull` of the way to the cluster's center, both
-    /// eased in and out. The bubbles melt together.
-    static let mergeDuration: TimeInterval = 0.18
-    /// Second phase: the bubbles keep converging on the center and scale down
-    /// to zero, so the fused drop is pulled into a point.
-    static let vanishDuration: TimeInterval = 0.14
+    /// eased in and out. The bubbles melt together. Long enough that the
+    /// bridges between bubbles can actually be seen forming (owner request).
+    static let mergeDuration: TimeInterval = 0.45
+    /// Second phase: the fused drop holds still, so "stuck together" reads
+    /// as its own beat before anything disappears.
+    static let holdDuration: TimeInterval = 0.12
+    /// Third phase: the drop fades out in place. No scaling and no further
+    /// movement — shrinking the drop into its center looked bad, worst on
+    /// large clusters (owner request).
+    static let vanishDuration: TimeInterval = 0.25
     /// Blur radius reached at the end of the merge phase, in logical units.
-    static let maxBlurRadius: CGFloat = 7
-    /// Share of the distance to the cluster's center covered by the end of
-    /// the merge phase (the vanish phase covers the rest).
+    /// Bridges close at roughly 1.5, so a lower ceiling keeps more of the
+    /// merge in that visible bridging range.
+    static let maxBlurRadius: CGFloat = 5
+    /// Share of the distance to the cluster's center covered during the merge
+    /// phase; the bubbles then stay put while the drop fades.
     static let mergePull: CGFloat = 0.35
     /// Alpha level `t` of the blurred image that becomes the drop's edge:
     /// the threshold's output alpha is `k·a − k·t`, clamped to 0…1.
@@ -187,7 +194,12 @@ final class GooMergeNode: SKEffectNode {
         // Mid-merge: the blur radius must be non-zero, since a blur of zero
         // is skipped and the real kernels only run once it grows.
         let merge = mergeDuration * timeScale
-        layer.render(elapsed: merge / 2, merge: merge, vanish: vanishDuration * timeScale)
+        layer.render(
+            elapsed: merge / 2,
+            merge: merge,
+            hold: holdDuration * timeScale,
+            vanish: vanishDuration * timeScale
+        )
         // `texture(from:)` draws the node tree right away; asking for the
         // image makes sure the work has actually happened by the time we
         // return.
@@ -200,40 +212,50 @@ final class GooMergeNode: SKEffectNode {
     /// action, then calls `completion` — the owner removes the layer there.
     func play(completion: @escaping () -> Void) {
         let merge = Self.mergeDuration * Self.timeScale
+        let hold = Self.holdDuration * Self.timeScale
         let vanish = Self.vanishDuration * Self.timeScale
-        let animate = SKAction.customAction(withDuration: merge + vanish) { node, elapsed in
-            (node as? GooMergeNode)?.render(elapsed: TimeInterval(elapsed), merge: merge, vanish: vanish)
+        let animate = SKAction.customAction(withDuration: merge + hold + vanish) { node, elapsed in
+            (node as? GooMergeNode)?.render(
+                elapsed: TimeInterval(elapsed),
+                merge: merge,
+                hold: hold,
+                vanish: vanish
+            )
         }
         run(SKAction.sequence([animate, SKAction.run(completion)]), withKey: animationKey)
     }
 
-    /// Sets the blur radius and every bubble's position/scale for the moment
-    /// `elapsed` seconds into the effect.
-    private func render(elapsed: TimeInterval, merge: TimeInterval, vanish: TimeInterval) {
+    /// Sets the blur radius, every bubble's position and the layer's opacity
+    /// for the moment `elapsed` seconds into the effect: merge, then hold,
+    /// then fade. Bubbles keep their full size throughout.
+    private func render(elapsed: TimeInterval, merge: TimeInterval, hold: TimeInterval, vanish: TimeInterval) {
         let radius: CGFloat
         let pull: CGFloat
-        let scale: CGFloat
+        let opacity: CGFloat
         if elapsed < merge {
             let progress = Self.easeInOut(CGFloat(elapsed / merge))
             radius = Self.maxBlurRadius * progress
             pull = Self.mergePull * progress
-            scale = 1
-        } else {
-            let progress = Self.easeInOut(CGFloat(min(1, (elapsed - merge) / vanish)))
+            opacity = 1
+        } else if elapsed < merge + hold {
             radius = Self.maxBlurRadius
-            pull = Self.mergePull + (1 - Self.mergePull) * progress
-            // Never exactly zero: an empty frame would leave the effect
-            // nodes with nothing to render into.
-            scale = max(0.001, 1 - progress)
+            pull = Self.mergePull
+            opacity = 1
+        } else {
+            let progress = Self.easeInOut(CGFloat(min(1, (elapsed - merge - hold) / vanish)))
+            radius = Self.maxBlurRadius
+            pull = Self.mergePull
+            opacity = 1 - progress
         }
 
         blurFilter.radius = Float(radius * pixelsPerUnit)
+        alpha = opacity
         for member in members {
             member.node.position = CGPoint(
                 x: member.start.x + (center.x - member.start.x) * pull,
                 y: member.start.y + (center.y - member.start.y) * pull
             )
-            member.node.setScale(scale * pixelsPerUnit)
+            member.node.setScale(pixelsPerUnit)
         }
     }
 
