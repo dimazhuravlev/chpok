@@ -57,19 +57,22 @@ final class GameScene: SKScene {
     /// only later replacements slide (spec 21 step 3 exception).
     private var hasQueueBubbleAppeared = false
 
-    // MARK: - Gooey merge state (spec 37)
+    // MARK: - Bridge merge state (spec 38)
 
-    /// Ids of bubbles whose nodes were handed to a `GooMergeNode`. The
+    /// Ids of bubbles whose nodes were handed to a `BridgeMergeNode`. The
     /// engine drops a cluster's bubbles one at a time, ~70 ms apart, so for
     /// a while these ids are still in `engine.bubbles` with no node in
     /// `nodes`: `sync()` must skip them (it would otherwise create a fresh
-    /// node for each, on top of the merge). An id leaves the set when its
+    /// node for each, on top of the effect). An id leaves the set when its
     /// own `.removed` arrives — not when the layer finishes, because a big
     /// cluster's removals can outlast the effect itself.
-    private var gooIds: Set<Int> = []
+    private var mergeIds: Set<Int> = []
     /// Merge layers currently animating, so a board reset can tear them down
     /// mid-effect.
-    private var gooLayers: [GooMergeNode] = []
+    private var mergeLayers: [BridgeMergeNode] = []
+    /// Id of the bubble that landed most recently — the one the player fired,
+    /// and so where a match's bridge wave starts.
+    private var lastLandedId: Int?
 
     var onScoreChanged: ((Int) -> Void)?
     var onGameOver: ((Bool, Int, Int, Int) -> Void)?
@@ -89,13 +92,6 @@ final class GameScene: SKScene {
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    override func didMove(to view: SKView) {
-        // Spec 37: pay the merge effect's one-time filter setup cost now,
-        // while the game is still fading in, not in the middle of the first
-        // pop (see `GooMergeNode.warmUp`).
-        GooMergeNode.warmUp(in: view)
     }
 
     // MARK: - Touches
@@ -160,10 +156,10 @@ final class GameScene: SKScene {
 
         var seenIds = Set<Int>()
         for bubble in engine.bubbles {
-            // Spec 37: a bubble inside a gooey merge layer belongs to that
+            // Spec 38: a bubble inside a bridge merge layer belongs to that
             // layer until the engine finishes removing it — neither move it
             // nor create a second node for it.
-            if gooIds.contains(bubble.id) { continue }
+            if mergeIds.contains(bubble.id) { continue }
             seenIds.insert(bubble.id)
             let scenePos = geometry.scenePoint(bubble.position)
             if let node = nodes[bubble.id] as? BubbleNode {
@@ -268,7 +264,7 @@ final class GameScene: SKScene {
     private func handleEvents() {
         let events = engine.drainEvents()
         // Where the engine put every bubble it already removed within this
-        // very batch — see `startGooMerge`.
+        // very batch — see `startBridgeMerge`.
         var removedPositions: [Int: Vec2] = [:]
         for case let .removed(id, _, position, _, _) in events {
             removedPositions[id] = position
@@ -277,8 +273,10 @@ final class GameScene: SKScene {
         for event in events {
             haptics.handle(event)
             switch event {
+            case let .landed(id, _, _):
+                lastLandedId = id
             case let .clusterMatched(ids, color):
-                startGooMerge(ids: ids, color: color, removedPositions: removedPositions)
+                startBridgeMerge(ids: ids, color: color, removedPositions: removedPositions)
             case let .removed(id, _, _, _, reason):
                 animateRemoval(id: id, reason: reason)
             case let .scoreChanged(score):
@@ -306,26 +304,21 @@ final class GameScene: SKScene {
         }
     }
 
-    /// Device pixels per logical unit of this scene as it is currently shown
-    /// — the `.aspectFit` scale of the scene inside its view, times the
-    /// view's pixel density — or 1 before the scene is presented. The merge
-    /// layer renders at this density (see `GooMergeNode`).
-    private var pixelsPerUnit: CGFloat {
-        guard let view, size.width > 0, size.height > 0 else { return 1 }
-        let fit = min(view.bounds.width / size.width, view.bounds.height / size.height)
-        return max(1, fit * view.contentScaleFactor)
-    }
-
-    /// Spec 37: hands a freshly matched cluster over to a `GooMergeNode`.
+    /// Spec 38: hands a freshly matched cluster over to a `BridgeMergeNode`.
     /// The nodes of every listed bubble move into the effect layer (keeping
     /// their positions), lose their pending move/fade actions and stored
     /// targets, and from then on are only the layer's business: `sync()`
-    /// skips their ids (`gooIds`) until the engine's per-bubble `.removed`
+    /// skips their ids (`mergeIds`) until the engine's per-bubble `.removed`
     /// events arrive, which `animateRemoval` merely checks off.
-    private func startGooMerge(ids: [Int], color: BubbleColor, removedPositions: [Int: Vec2]) {
+    private func startBridgeMerge(ids: [Int], color: BubbleColor, removedPositions: [Int: Vec2]) {
         let livePositions = Dictionary(uniqueKeysWithValues: engine.bubbles.map { ($0.id, $0.position) })
 
+        // The bridge wave starts at the bubble the player just fired, when it
+        // is part of the cluster; otherwise at the cluster's first bubble.
+        let startId = lastLandedId.flatMap { ids.contains($0) ? $0 : nil } ?? ids.first
+
         var members: [BubbleNode] = []
+        var startIndex = 0
         for id in ids {
             guard let node = nodes[id] as? BubbleNode else { continue }
             nodes.removeValue(forKey: id)
@@ -346,30 +339,31 @@ final class GameScene: SKScene {
             node.alpha = 1
             targets.removeValue(forKey: id)
 
-            gooIds.insert(id)
+            mergeIds.insert(id)
+            if id == startId { startIndex = members.count }
             members.append(node)
         }
         guard !members.isEmpty else { return }
 
-        let layer = GooMergeNode(bubbles: members, color: Palette.color(for: color), pixelsPerUnit: pixelsPerUnit)
+        let layer = BridgeMergeNode(bubbles: members, startIndex: startIndex, color: Palette.color(for: color))
         addChild(layer)
-        gooLayers.append(layer)
+        mergeLayers.append(layer)
         layer.play { [weak self, weak layer] in
             guard let layer else { return }
             layer.removeFromParent()
-            self?.gooLayers.removeAll { $0 === layer }
+            self?.mergeLayers.removeAll { $0 === layer }
         }
     }
 
     private func animateRemoval(id: Int, reason: RemovalReason) {
-        // Spec 37: a match removal has no animation of its own any more. A
-        // bubble that went into a gooey merge layer is animated by that
+        // Spec 38: a match removal has no animation of its own any more. A
+        // bubble that went into a bridge merge layer is animated by that
         // layer, so its `.removed` only checks it off — which is also what
         // lets `sync()` trust `engine.bubbles` for this id again. (Any other
         // match-removed node — in practice there is none, the engine
         // announces the whole cluster before its first removal — is simply
         // dropped by `sync()`, as its id is gone from `engine.bubbles`.)
-        if gooIds.remove(id) != nil || reason == .match { return }
+        if mergeIds.remove(id) != nil || reason == .match { return }
 
         guard let node = nodes.removeValue(forKey: id) else { return }
         dying.insert(id)
@@ -400,14 +394,15 @@ final class GameScene: SKScene {
             node.removeAllActions()
             node.removeFromParent()
         }
-        // Spec 37: active merge layers go too, taking the bubble nodes
+        // Spec 38: active merge layers go too, taking the bubble nodes
         // they hold along with them.
-        for layer in gooLayers {
+        for layer in mergeLayers {
             layer.removeAllActions()
             layer.removeFromParent()
         }
-        gooLayers.removeAll()
-        gooIds.removeAll()
+        mergeLayers.removeAll()
+        mergeIds.removeAll()
+        lastLandedId = nil
         nodes.removeAll()
         dying.removeAll()
         targets.removeAll()

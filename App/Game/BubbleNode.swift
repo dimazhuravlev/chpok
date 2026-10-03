@@ -108,7 +108,7 @@ final class BubbleNode: SKSpriteNode {
     }()
 
     /// The border ring child (spec 35), kept so it can be hidden while the
-    /// bubble is part of a gooey merge layer (spec 37) — see
+    /// bubble is part of a bridge merge layer (spec 38) — see
     /// `setBorderHidden(_:)`.
     private var borderNode: SKSpriteNode?
 
@@ -148,10 +148,10 @@ final class BubbleNode: SKSpriteNode {
         self.color = Palette.color(for: color)
     }
 
-    /// Spec 37: hides (or shows) the gradient border ring. A bubble that
-    /// joins a gooey merge layer loses its ring there — the layer draws the
-    /// drop in one flat color, and a blurred ring would only muddy its edge.
-    /// Bubbles at rest keep it.
+    /// Spec 38: hides (or shows) the gradient border ring. A bubble that
+    /// joins a bridge merge layer loses its ring there — the layer draws the
+    /// figure in one flat color, which the ring would only muddy. Bubbles at
+    /// rest keep it.
     func setBorderHidden(_ hidden: Bool) {
         borderNode?.isHidden = hidden
     }
