@@ -76,9 +76,13 @@ final class GameViewModel: ObservableObject {
     /// Extra lift (points) applied to both the cannon and queue-bubble
     /// positions in `prepare(containerSize:)` (spec 31): the queue bubble
     /// used to be clipped by the bottom edge, so both move up by this same
-    /// amount, keeping the 96pt gap between their centers untouched. One
+    /// amount, keeping the `queueGap` between their centers untouched. One
     /// constant to tweak the whole block.
     static let cannonBlockLift: Double = 72
+    /// Distance (points) from the cannon-bubble center down to the
+    /// queue-bubble center. 96 in the Figma layout (spec 20), pushed 16pt
+    /// lower by owner request.
+    static let queueGap: Double = 112
 
     @Published var score = 0
     @Published var livesLeft = 5
@@ -141,8 +145,8 @@ final class GameViewModel: ObservableObject {
     ///
     /// Geometry per the Figma layout (spec 20), raised per spec 31: the
     /// cannon-bubble center sits 127pt above the scene's bottom edge (103pt
-    /// plus `cannonBlockLift`), the queue-bubble center 96pt further down
-    /// (31pt above the bottom edge), and the input area's bottom edge 64
+    /// plus `cannonBlockLift`), the queue-bubble center `queueGap` further
+    /// down, and the input area's bottom edge 64
     /// logical units above the cannon (unchanged from `GameLayout.fitting`'s
     /// own gap).
     func prepare(containerSize: CGSize) {
@@ -158,7 +162,7 @@ final class GameViewModel: ObservableObject {
         let scale = areaWidth / GameConsts.boardLogicalWidth
         let canvasHeight = GameConsts.boardLogicalWidth * areaHeight / areaWidth
         let cannonY = canvasHeight - (103 + Self.cannonBlockLift) / scale
-        let queueY = cannonY + 96 / scale
+        let queueY = cannonY + Self.queueGap / scale
         let cannonPivotX = GameConsts.boardMinX + GameConsts.boardLogicalWidth / 2
         let inputAreaMaxY = cannonY - 64
         let layout = GameLayout(
