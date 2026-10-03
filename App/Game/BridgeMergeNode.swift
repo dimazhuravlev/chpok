@@ -161,11 +161,12 @@ final class BridgeMergeNode: SKEffectNode {
     /// late (see `darkeningDelay`) and is eased in and out. Long enough for
     /// the cloud to be seen.
     static let fadeDuration: TimeInterval = 0.45
-    /// Blur radius the dissolve ends at (specs 39, 40, 41), logical units: well
-    /// over a bubble's own radius, so the figure turns into a cloud rather than
-    /// a soft-edged shape. It eases out over the dissolve, so the figure spreads
-    /// quickly and then keeps thinning out.
-    static let maxBlurRadius: CGFloat = 25
+    /// Blur radius the dissolve ends at (specs 39-42), logical units: well over
+    /// a bubble's own radius (15) — more than two and a half times it — so the
+    /// figure turns into a cloud rather than a soft-edged shape. It eases out
+    /// over the dissolve, so the figure spreads quickly and then keeps thinning
+    /// out.
+    static let maxBlurRadius: CGFloat = 40
     /// Share of the dissolve (0...1) during which the figure only blurs and
     /// keeps its brightness; the darkening is squeezed into the rest.
     static let darkeningDelay: CGFloat = 0.25
@@ -173,7 +174,7 @@ final class BridgeMergeNode: SKEffectNode {
     /// units (see the class comment). Must be at least 3 × `maxBlurRadius`,
     /// the reach of the blur kernel, or the cloud is cut off by a straight
     /// line at the buffer's edge.
-    static let bufferMargin: CGFloat = 85
+    static let bufferMargin: CGFloat = 130
     /// Number of pre-drawn growth frames (`v` from 0 to `bridgeSpread`).
     static let bridgeTextureSteps = 36
     /// Two bubbles are neighbours when their centers are closer than this
