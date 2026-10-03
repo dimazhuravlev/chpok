@@ -98,8 +98,8 @@ enum BridgeShape {
 /// the same up to rotation: the growth frames are drawn once, for a horizontal
 /// pair, and shared by all bridges of all effects.
 ///
-/// The dissolve (spec 39) is two things at once: the tint of every part
-/// darkens to black, and the figure blurs.
+/// The dissolve (specs 39, 40) is two things at once: the figure blurs into a
+/// cloud, and the tint of every part darkens to black, a little later.
 ///
 /// The darkening lowers the tint rather than the opacity. SpriteKit applies
 /// opacity to each node separately, so wherever a bridge tucks under a circle
@@ -159,17 +159,23 @@ final class BridgeMergeNode: SKEffectNode {
     static let maxWaveSpread: TimeInterval = 0.45
     /// Pause between the last bridge completing and the dissolve starting.
     static let holdAfterBridges: TimeInterval = 0.1
-    /// How long the dissolve takes. The darkening is eased in and out, the
-    /// blur eased out (see `maxBlurRadius`).
-    static let fadeDuration: TimeInterval = 0.3
-    /// Blur radius the dissolve ends at (spec 39), logical units. It eases out
-    /// over the dissolve, so it builds up a little ahead of the darkening and
-    /// can actually be seen.
-    static let maxBlurRadius: CGFloat = 5
+    /// How long the dissolve takes. The blur eases out, the darkening starts
+    /// late (see `darkeningDelay`) and is eased in and out. Long enough for
+    /// the cloud to be seen.
+    static let fadeDuration: TimeInterval = 0.45
+    /// Blur radius the dissolve ends at (specs 39, 40), logical units: about a
+    /// bubble's own radius, so the figure turns into a cloud rather than a
+    /// soft-edged shape. It eases out over the dissolve, so the figure spreads
+    /// quickly and then keeps thinning out.
+    static let maxBlurRadius: CGFloat = 16
+    /// Share of the dissolve (0...1) during which the figure only blurs and
+    /// keeps its brightness; the darkening is squeezed into the rest.
+    static let darkeningDelay: CGFloat = 0.25
     /// Empty space kept around the figure inside the effect's buffer, logical
-    /// units (see the class comment). Must comfortably exceed 3 ×
-    /// `maxBlurRadius`, the reach of the blur kernel.
-    static let bufferMargin: CGFloat = 24
+    /// units (see the class comment). Must be at least 3 × `maxBlurRadius`,
+    /// the reach of the blur kernel, or the cloud is cut off by a straight
+    /// line at the buffer's edge.
+    static let bufferMargin: CGFloat = 56
     /// Number of pre-drawn growth frames (`v` from 0 to `bridgeSpread`).
     static let bridgeTextureSteps = 24
     /// Two bubbles are neighbours when their centers are closer than this
@@ -484,8 +490,9 @@ final class BridgeMergeNode: SKEffectNode {
         let dissolveStart = bridgesDoneAt + Self.holdAfterBridges
         let dissolve = min(1, max(0, CGFloat((time - dissolveStart) / Self.fadeDuration)))
 
-        // The blur gets ahead of the darkening, so it can be seen. Effects are
-        // on from the first frame of the dissolve and not before.
+        // The blur gets ahead of the darkening (which waits out
+        // `darkeningDelay`), so the cloud can be seen. Effects are on from the
+        // first frame of the dissolve and not before.
         let radius = Self.maxBlurRadius * Self.easeOut(dissolve)
         if radius != appliedRadius {
             appliedRadius = radius
@@ -494,7 +501,7 @@ final class BridgeMergeNode: SKEffectNode {
             if radius > 0 { Self.isWarm = true }
         }
 
-        let dark = Self.smooth(dissolve)
+        let dark = Self.smooth((dissolve - Self.darkeningDelay) / (1 - Self.darkeningDelay))
         guard dark != appliedDark else { return }
         appliedDark = dark
         let tint = UIColor(red: red * (1 - dark), green: green * (1 - dark), blue: blue * (1 - dark), alpha: 1)
