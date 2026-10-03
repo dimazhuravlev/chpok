@@ -57,24 +57,19 @@ final class GameScene: SKScene {
     /// only later replacements slide (spec 21 step 3 exception).
     private var hasQueueBubbleAppeared = false
 
-    // MARK: - Match-removal flash tuning (spec 33)
-    //
-    // A match removal plays two phases in sequence: this flash, then the
-    // pre-existing shrink-to-zero + fade-out. Every tunable number for the
-    // flash is kept here, next to each other, so the whole beat can be
-    // re-timed with a single edit.
-    /// Flash phase duration — first phase of a match removal, replacing the
-    /// old plain scale-up. The second phase's duration is unchanged, so the
-    /// small increase here is the only change to the overall removal time.
-    private let flashDuration: TimeInterval = 0.08
-    /// Second phase duration (simultaneous shrink-to-zero + fade-out) —
-    /// unchanged from before this spec.
-    private let popFadeDuration: TimeInterval = 0.12
-    /// Scale reached at the flash's peak (the node's normal scale is 1).
-    private let flashScale: CGFloat = 1.18
-    /// How far the fill lightens toward white at the flash's peak (0 = no
-    /// change, 1 = pure white).
-    private let flashLightenFraction: CGFloat = 0.35
+    // MARK: - Gooey merge state (spec 37)
+
+    /// Ids of bubbles whose nodes were handed to a `GooMergeNode`. The
+    /// engine drops a cluster's bubbles one at a time, ~70 ms apart, so for
+    /// a while these ids are still in `engine.bubbles` with no node in
+    /// `nodes`: `sync()` must skip them (it would otherwise create a fresh
+    /// node for each, on top of the merge). An id leaves the set when its
+    /// own `.removed` arrives — not when the layer finishes, because a big
+    /// cluster's removals can outlast the effect itself.
+    private var gooIds: Set<Int> = []
+    /// Merge layers currently animating, so a board reset can tear them down
+    /// mid-effect.
+    private var gooLayers: [GooMergeNode] = []
 
     var onScoreChanged: ((Int) -> Void)?
     var onGameOver: ((Bool, Int, Int, Int) -> Void)?
@@ -94,6 +89,13 @@ final class GameScene: SKScene {
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMove(to view: SKView) {
+        // Spec 37: pay the merge effect's one-time filter setup cost now,
+        // while the game is still fading in, not in the middle of the first
+        // pop (see `GooMergeNode.warmUp`).
+        GooMergeNode.warmUp(in: view)
     }
 
     // MARK: - Touches
@@ -158,6 +160,10 @@ final class GameScene: SKScene {
 
         var seenIds = Set<Int>()
         for bubble in engine.bubbles {
+            // Spec 37: a bubble inside a gooey merge layer belongs to that
+            // layer until the engine finishes removing it — neither move it
+            // nor create a second node for it.
+            if gooIds.contains(bubble.id) { continue }
             seenIds.insert(bubble.id)
             let scenePos = geometry.scenePoint(bubble.position)
             if let node = nodes[bubble.id] as? BubbleNode {
@@ -260,9 +266,19 @@ final class GameScene: SKScene {
     // MARK: - Events
 
     private func handleEvents() {
-        for event in engine.drainEvents() {
+        let events = engine.drainEvents()
+        // Where the engine put every bubble it already removed within this
+        // very batch — see `startGooMerge`.
+        var removedPositions: [Int: Vec2] = [:]
+        for case let .removed(id, _, position, _, _) in events {
+            removedPositions[id] = position
+        }
+
+        for event in events {
             haptics.handle(event)
             switch event {
+            case let .clusterMatched(ids, color):
+                startGooMerge(ids: ids, color: color, removedPositions: removedPositions)
             case let .removed(id, _, _, _, reason):
                 animateRemoval(id: id, reason: reason)
             case let .scoreChanged(score):
@@ -290,7 +306,71 @@ final class GameScene: SKScene {
         }
     }
 
+    /// Device pixels per logical unit of this scene as it is currently shown
+    /// — the `.aspectFit` scale of the scene inside its view, times the
+    /// view's pixel density — or 1 before the scene is presented. The merge
+    /// layer renders at this density (see `GooMergeNode`).
+    private var pixelsPerUnit: CGFloat {
+        guard let view, size.width > 0, size.height > 0 else { return 1 }
+        let fit = min(view.bounds.width / size.width, view.bounds.height / size.height)
+        return max(1, fit * view.contentScaleFactor)
+    }
+
+    /// Spec 37: hands a freshly matched cluster over to a `GooMergeNode`.
+    /// The nodes of every listed bubble move into the effect layer (keeping
+    /// their positions), lose their pending move/fade actions and stored
+    /// targets, and from then on are only the layer's business: `sync()`
+    /// skips their ids (`gooIds`) until the engine's per-bubble `.removed`
+    /// events arrive, which `animateRemoval` merely checks off.
+    private func startGooMerge(ids: [Int], color: BubbleColor, removedPositions: [Int: Vec2]) {
+        let livePositions = Dictionary(uniqueKeysWithValues: engine.bubbles.map { ($0.id, $0.position) })
+
+        var members: [BubbleNode] = []
+        for id in ids {
+            guard let node = nodes[id] as? BubbleNode else { continue }
+            nodes.removeValue(forKey: id)
+
+            // This frame's `sync()` has not run yet, so the node may be
+            // stale. The fired bubble is still where the previous frame left
+            // it in flight, and since it sits at the bottom of the cluster it
+            // is usually the first one removed — in this very batch, which
+            // leaves the engine no longer listing it (its `.removed` carries
+            // the final position instead). A bubble caught mid row-slide is
+            // not at its cell yet either. Pin every member to the engine's
+            // position: `sync()` won't touch it again.
+            if let position = livePositions[id] ?? removedPositions[id] {
+                node.position = geometry.scenePoint(position)
+            }
+            node.removeAction(forKey: moveActionKey)
+            node.removeAction(forKey: fadeActionKey)
+            node.alpha = 1
+            targets.removeValue(forKey: id)
+
+            gooIds.insert(id)
+            members.append(node)
+        }
+        guard !members.isEmpty else { return }
+
+        let layer = GooMergeNode(bubbles: members, color: Palette.color(for: color), pixelsPerUnit: pixelsPerUnit)
+        addChild(layer)
+        gooLayers.append(layer)
+        layer.play { [weak self, weak layer] in
+            guard let layer else { return }
+            layer.removeFromParent()
+            self?.gooLayers.removeAll { $0 === layer }
+        }
+    }
+
     private func animateRemoval(id: Int, reason: RemovalReason) {
+        // Spec 37: a match removal has no animation of its own any more. A
+        // bubble that went into a gooey merge layer is animated by that
+        // layer, so its `.removed` only checks it off — which is also what
+        // lets `sync()` trust `engine.bubbles` for this id again. (Any other
+        // match-removed node — in practice there is none, the engine
+        // announces the whole cluster before its first removal — is simply
+        // dropped by `sync()`, as its id is gone from `engine.bubbles`.)
+        if gooIds.remove(id) != nil || reason == .match { return }
+
         guard let node = nodes.removeValue(forKey: id) else { return }
         dying.insert(id)
         // Spec 21 step 1/5: drop any stored target along with the node so a
@@ -298,7 +378,7 @@ final class GameScene: SKScene {
         // will be looked up again, but nothing should linger either), and
         // cancel any in-flight move/fade action first so it can't fight the
         // removal animation below (e.g. a hanging bubble that starts
-        // falling mid row-drop-slide, or gets matched mid fade-in).
+        // falling mid row-drop-slide).
         targets.removeValue(forKey: id)
         node.removeAction(forKey: moveActionKey)
         node.removeAction(forKey: fadeActionKey)
@@ -308,68 +388,11 @@ final class GameScene: SKScene {
             self?.dying.remove(id)
         }
 
-        let action: SKAction
-        switch reason {
-        case .match:
-            // Spec 33 step 3: the shrink+fade phase is unchanged; the glow
-            // and outline set up by the flash below ride along with it for
-            // free since they're rendered as part of this same node — no
-            // need to fade them out separately.
-            let shrinkAndFade = SKAction.group([
-                SKAction.scale(to: 0, duration: popFadeDuration),
-                SKAction.fadeOut(withDuration: popFadeDuration)
-            ])
-            if let bubble = node as? BubbleNode {
-                action = SKAction.sequence([flashAction(for: bubble), shrinkAndFade, cleanup])
-            } else {
-                // Defensive fallback — every node in `nodes` is actually a
-                // `BubbleNode` (see `sync()`), so this never runs in
-                // practice, but skips the flash cleanly if that ever stops
-                // holding true instead of crashing.
-                action = SKAction.sequence([shrinkAndFade, cleanup])
-            }
-        case .hanging:
-            let fall = SKAction.group([
-                SKAction.moveBy(x: 0, y: -300, duration: 0.45),
-                SKAction.fadeOut(withDuration: 0.45)
-            ])
-            action = SKAction.sequence([fall, cleanup])
-        }
-        node.run(action)
-    }
-
-    /// Spec 33 step 2: the flash that opens a match removal. Runs as one
-    /// `customAction` so scale, fill color, outline alpha, and glow all ease
-    /// in together, from the bubble's actual current color (read via
-    /// `BubbleNode.currentColor`, so a spec-32 palette customization flashes
-    /// in its own hue) toward the same lightened tint.
-    private func flashAction(for bubble: BubbleNode) -> SKAction {
-        let baseColor = bubble.currentColor
-        let litColor = baseColor.lightened(by: flashLightenFraction)
-        var baseR: CGFloat = 0, baseG: CGFloat = 0, baseB: CGFloat = 0, baseA: CGFloat = 0
-        baseColor.getRed(&baseR, green: &baseG, blue: &baseB, alpha: &baseA)
-        var litR: CGFloat = 0, litG: CGFloat = 0, litB: CGFloat = 0, litA: CGFloat = 0
-        litColor.getRed(&litR, green: &litG, blue: &litB, alpha: &litA)
-
-        let duration = flashDuration
-        let scale = flashScale
-
-        return SKAction.customAction(withDuration: duration) { node, elapsed in
-            guard let sprite = node as? SKSpriteNode else { return }
-            // `elapsed` is the time since the action started, in seconds —
-            // turn it into a 0...1 progress and ease it out slightly so the
-            // flash settles rather than arriving at a constant rate.
-            let t = duration > 0 ? min(1, max(0, CGFloat(elapsed) / CGFloat(duration))) : 1
-            let eased = t * (2 - t)
-
-            sprite.setScale(1 + (scale - 1) * eased)
-            sprite.color = SKColor(
-                red: baseR + (litR - baseR) * eased,
-                green: baseG + (litG - baseG) * eased,
-                blue: baseB + (litB - baseB) * eased,
-                alpha: baseA + (litA - baseA) * eased
-            )
-        }
+        let fall = SKAction.group([
+            SKAction.moveBy(x: 0, y: -300, duration: 0.45),
+            SKAction.fadeOut(withDuration: 0.45)
+        ])
+        node.run(SKAction.sequence([fall, cleanup]))
     }
 
     private func performBoardReset() {
@@ -377,6 +400,14 @@ final class GameScene: SKScene {
             node.removeAllActions()
             node.removeFromParent()
         }
+        // Spec 37: active merge layers go too, taking the bubble nodes
+        // they hold along with them.
+        for layer in gooLayers {
+            layer.removeAllActions()
+            layer.removeFromParent()
+        }
+        gooLayers.removeAll()
+        gooIds.removeAll()
         nodes.removeAll()
         dying.removeAll()
         targets.removeAll()

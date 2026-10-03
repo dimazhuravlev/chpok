@@ -107,12 +107,10 @@ final class BubbleNode: SKSpriteNode {
         return texture
     }()
 
-    /// The slot color currently applied via `color`/`colorBlendFactor`, kept
-    /// in sync by `apply(color:)`. Spec 33: the match-removal flash reads
-    /// this back to compute its lightened tint, so it works from the
-    /// bubble's *actual* displayed color — which may be a spec-32 user
-    /// palette customization — rather than some fixed default.
-    private(set) var currentColor: SKColor = .white
+    /// The border ring child (spec 35), kept so it can be hidden while the
+    /// bubble is part of a gooey merge layer (spec 37) — see
+    /// `setBorderHidden(_:)`.
+    private var borderNode: SKSpriteNode?
 
     init(color: BubbleColor) {
         super.init(texture: Self.circleTexture, color: .white, size: Self.logicalSize)
@@ -127,8 +125,7 @@ final class BubbleNode: SKSpriteNode {
         // size as the fill, centered on the parent's origin, so its ring
         // lines up exactly with the fill's edge; it needs no independent
         // scale/alpha animation of its own because a child sprite's
-        // rendering already inherits the parent's scale (and, during the
-        // match-removal flash's shrink/fade, the parent's alpha) for free.
+        // rendering already inherits the parent's scale and alpha for free.
         let border = SKSpriteNode(texture: Self.ringTexture, color: .white, size: Self.logicalSize)
         border.position = .zero
         border.colorBlendFactor = 0
@@ -138,6 +135,7 @@ final class BubbleNode: SKSpriteNode {
         border.alpha = 1
         border.zPosition = 1
         addChild(border)
+        borderNode = border
 
         apply(color: color)
     }
@@ -147,25 +145,14 @@ final class BubbleNode: SKSpriteNode {
     }
 
     func apply(color: BubbleColor) {
-        currentColor = Palette.color(for: color)
-        self.color = currentColor
+        self.color = Palette.color(for: color)
     }
-}
 
-extension SKColor {
-    /// Blends this color toward white by `fraction` (0 = unchanged, 1 = pure
-    /// white). Spec 33: lightening is done by mixing with white rather than
-    /// boosting HSB brightness — brightness barely changes the look of some
-    /// of the palette's already-saturated colors, while mixing with white
-    /// gives a predictable result for any hue.
-    func lightened(by fraction: CGFloat) -> SKColor {
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        getRed(&r, green: &g, blue: &b, alpha: &a)
-        return SKColor(
-            red: r + (1 - r) * fraction,
-            green: g + (1 - g) * fraction,
-            blue: b + (1 - b) * fraction,
-            alpha: a
-        )
+    /// Spec 37: hides (or shows) the gradient border ring. A bubble that
+    /// joins a gooey merge layer loses its ring there — the layer draws the
+    /// drop in one flat color, and a blurred ring would only muddy its edge.
+    /// Bubbles at rest keep it.
+    func setBorderHidden(_ hidden: Bool) {
+        borderNode?.isHidden = hidden
     }
 }
