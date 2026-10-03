@@ -80,9 +80,9 @@ final class GameViewModel: ObservableObject {
     /// constant to tweak the whole block.
     static let cannonBlockLift: Double = 72
     /// Distance (points) from the cannon-bubble center down to the
-    /// queue-bubble center. 96 in the Figma layout (spec 20), pushed 16pt
+    /// queue-bubble center. 96 in the Figma layout (spec 20), pushed 28pt
     /// lower by owner request.
-    static let queueGap: Double = 112
+    static let queueGap: Double = 124
 
     @Published var score = 0
     @Published var livesLeft = 5
