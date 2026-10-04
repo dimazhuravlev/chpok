@@ -34,6 +34,10 @@ enum FallBlurFrames {
     static let frameCount = 24
     /// Side of every generated texture, pixels.
     private static let side = 256
+    /// Share of the fall during which the bubble just falls, sharp; the blur
+    /// runs over the rest. Blurring from the first frame read as too fast
+    /// (owner request).
+    static let blurDelay: CGFloat = 0.4
 
     // MARK: - Ladder
 
@@ -136,8 +140,9 @@ enum FallBlurFrames {
 
     // MARK: - Fall
 
-    /// The action that blurs a falling bubble over `duration` seconds: the
-    /// radius follows `BridgeMergeNode`'s ease-out up to its maximum, and
+    /// The action that blurs a falling bubble over `duration` seconds: after
+    /// `blurDelay` of it the radius follows `BridgeMergeNode`'s ease-out up to
+    /// its maximum over the remaining time, and
     /// every time the nearest frame changes, the bubble's texture and size
     /// are swapped for it. The ring goes with the first blurred frame — a
     /// cloud has no outline. Run it alongside the fall and the fade. Nil when
@@ -149,7 +154,8 @@ enum FallBlurFrames {
         return SKAction.customAction(withDuration: duration) { node, elapsed in
             guard let bubble = node as? BubbleNode else { return }
             let progress = duration > 0 ? CGFloat(elapsed) / CGFloat(duration) : 1
-            let radius = BridgeMergeNode.maxBlurRadius * BridgeMergeNode.easeOut(progress)
+            let blurProgress = (progress - blurDelay) / (1 - blurDelay)
+            let radius = BridgeMergeNode.maxBlurRadius * BridgeMergeNode.easeOut(blurProgress)
             let index = frameIndex(forRadius: radius)
             guard index != shown, let frame = frame(at: index) else { return }
             shown = index
