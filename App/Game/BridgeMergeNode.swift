@@ -165,7 +165,8 @@ final class BridgeMergeNode: SKEffectNode {
     /// a bubble's own radius (15) — more than two and a half times it — so the
     /// figure turns into a cloud rather than a soft-edged shape. It eases out
     /// over the dissolve, so the figure spreads quickly and then keeps thinning
-    /// out.
+    /// out. The bubbles that fall off the board blur up to the same radius
+    /// (spec 45).
     static let maxBlurRadius: CGFloat = 40
     /// Share of the dissolve (0...1) during which the figure only blurs and
     /// keeps its brightness; the darkening is squeezed into the rest.
@@ -201,8 +202,9 @@ final class BridgeMergeNode: SKEffectNode {
     // MARK: - Bridge textures
 
     /// Radius of the visible bubble circle: the shared circle texture is
-    /// 256 px with a 2 px inset, drawn into a 30-unit sprite.
-    private static let circleRadius: CGFloat = 30 * (256 - 2 * 2) / 256 / 2
+    /// 256 px with a 2 px inset, drawn into a 30-unit sprite. Also the circle
+    /// that `FallBlurFrames` blurs (spec 45).
+    static let circleRadius: CGFloat = 30 * (256 - 2 * 2) / 256 / 2
     /// Distance between neighbouring centers on the grid.
     private static let pairDistance = CGFloat(GameConsts.bubbleSize)
     /// Texture density, pixels per logical unit: about what the circle
@@ -522,8 +524,10 @@ final class BridgeMergeNode: SKEffectNode {
         return clamped * clamped * (3 - 2 * clamped)
     }
 
-    /// Quadratic ease-out clamped to 0...1: fast start, slow end.
-    private static func easeOut(_ t: CGFloat) -> CGFloat {
+    /// Quadratic ease-out clamped to 0...1: fast start, slow end. Shared with
+    /// the blur of falling bubbles (`FallBlurFrames`, spec 45), so both clouds
+    /// thin out the same way.
+    static func easeOut(_ t: CGFloat) -> CGFloat {
         let clamped = min(1, max(0, t))
         return 1 - (1 - clamped) * (1 - clamped)
     }

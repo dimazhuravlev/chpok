@@ -103,6 +103,10 @@ final class GameScene: SKScene {
     }
 
     override func didMove(to view: SKView) {
+        // Spec 45: draw the pre-blurred frames of the falling bubbles in the
+        // background; nothing here waits for them.
+        FallBlurFrames.prepare()
+
         // Spec 39: pay the dissolve blur's one-time setup cost while the
         // player is looking at the board, not in the middle of the first pop.
         // Deferred, never synchronous: a synchronous warm-up here holds the
@@ -435,11 +439,18 @@ final class GameScene: SKScene {
             self?.dying.remove(id)
         }
 
-        let fall = SKAction.group([
-            SKAction.moveBy(x: 0, y: -300, duration: 0.45),
-            SKAction.fadeOut(withDuration: 0.45)
-        ])
-        node.run(SKAction.sequence([fall, cleanup]))
+        let fallDuration: TimeInterval = 0.45
+        var fallActions = [
+            SKAction.moveBy(x: 0, y: -300, duration: fallDuration),
+            SKAction.fadeOut(withDuration: fallDuration)
+        ]
+        // Spec 45: a hanging bubble blurs into a cloud as it falls, like the
+        // dissolve of a matched cluster. Nil — it falls sharp — if the
+        // pre-blurred frames are not ready yet.
+        if let blur = FallBlurFrames.blurAction(duration: fallDuration) {
+            fallActions.append(blur)
+        }
+        node.run(SKAction.sequence([SKAction.group(fallActions), cleanup]))
     }
 
     private func performBoardReset() {
