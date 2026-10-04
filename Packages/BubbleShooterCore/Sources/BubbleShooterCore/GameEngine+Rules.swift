@@ -418,17 +418,25 @@ extension GameEngine {
     /// `state == .onBoard` filter (confirmed against source) — harmless in
     /// practice since ready/queue bubbles only ever reach `boardY == 0`
     /// after 10+ row additions.
+    ///
+    /// Unlike the original, the whole board is walked once, not once per
+    /// root: the original reset `traversed` after every row-0 root and so
+    /// re-walked everything the previous root had already reached (~17 full
+    /// passes — a visible hitch on a phone, in a Debug build above all). The
+    /// result is the same. A root that an earlier root already reached is
+    /// not a `markedToBeRemoved` wall, so whatever it reaches, the earlier
+    /// root reached too; and a wall is never visited by a traversal, so it
+    /// is never skipped here and still starts a walk of its own.
     func markHangingClusters(skipScore: Bool) {
         for b in bubbles {
             b.traversed = false
             if b.state == .onBoard { b.markedToBeHanged = true }
         }
 
-        for b in bubbles where b.boardY == 0 {
-            b.traversed = false
+        for b in bubbles where b.boardY == 0 && !b.traversed {
             traverseCluster(b)
-            for b2 in bubbles { b2.traversed = false }
         }
+        for b in bubbles { b.traversed = false }
 
         let removeArray = bubbles.filter { $0.markedToBeHanged }
         if !skipScore {
