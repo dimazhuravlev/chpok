@@ -38,6 +38,10 @@ final class GameScene: SKScene {
     /// into the vacated slot (spec 21 step 3) — both ends of the same
     /// "conveyor belt" move together over the same 0.18s ease-out.
     private let queueMoveDuration: TimeInterval = 0.18
+    /// Opacity of the bubble waiting in the queue under the cannon (spec 44).
+    /// It brightens to 1 over `queueMoveDuration`, in step with its slide
+    /// into the cannon; anything not `.inQueue` is always fully opaque.
+    private let queueBubbleAlpha: CGFloat = 0.4
     /// Duration for a new row's appearance (spec 21 step 4): existing
     /// bubbles glide down to their post-row-add position, new top-row
     /// bubbles fade in from zero alpha, both over this same span.
@@ -216,12 +220,24 @@ final class GameScene: SKScene {
     ///   ease-out for a queue/cannon slide, 0.3s linear while a row is being
     ///   added); anything smaller than `moveThreshold` is left alone so the
     ///   in-flight action isn't restarted every tick.
+    /// Spec 44: a launched bubble is also always fully opaque (its fade is
+    /// cancelled and alpha set to 1 on the spot), and a node that left
+    /// `.inQueue` (it is dimmed, no fade running) starts brightening to 1 in
+    /// step with its slide into the cannon.
     private func updatePosition(node: SKNode, bubble: Bubble, scenePos: CGPoint, addingRow: Bool) {
         if bubble.state == .launched {
             node.removeAction(forKey: moveActionKey)
+            node.removeAction(forKey: fadeActionKey)
+            node.alpha = 1
             targets.removeValue(forKey: bubble.id)
             node.position = scenePos
             return
+        }
+
+        if bubble.state != .inQueue, node.alpha < 1, node.action(forKey: fadeActionKey) == nil {
+            let brighten = SKAction.fadeAlpha(to: 1, duration: queueMoveDuration)
+            brighten.timingMode = .easeOut
+            node.run(brighten, withKey: fadeActionKey)
         }
 
         guard let previousTarget = targets[bubble.id] else {
@@ -249,13 +265,17 @@ final class GameScene: SKScene {
     ///   the bottom edge — and slides up over the same 0.18s ease-out as the
     ///   bubble it's replacing slides into the cannon, so both moves read as
     ///   one continuous belt. The very first queue bubble ever (match start
-    ///   or right after a board reset) is exempted: it just appears.
+    ///   or right after a board reset) is exempted: it just appears. Every
+    ///   `.inQueue` node, slid in or not, is dimmed to `queueBubbleAlpha`
+    ///   (spec 44) — a restored game or a rebuilt scene gets it too, since
+    ///   those create fresh nodes through here.
     /// - During a row-add frame, a brand-new top-row `.onBoard` bubble
     ///   starts at zero alpha and fades in over `rowAddDuration`, in place
     ///   (it's already at its final position, nothing to slide).
     private func placeNewNode(node: BubbleNode, bubble: Bubble, scenePos: CGPoint, addingRow: Bool) {
         if bubble.state == .inQueue {
             targets[bubble.id] = bubble.position
+            node.alpha = queueBubbleAlpha
             guard hasQueueBubbleAppeared else {
                 hasQueueBubbleAppeared = true
                 node.position = scenePos
