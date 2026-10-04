@@ -376,6 +376,9 @@ final class GameScene: SKScene {
         let layer = BridgeMergeNode(
             bubbles: members, startIndex: startIndex, color: Palette.color(for: color), pixelsPerUnit: pixelsPerUnit
         )
+        // Spec 43: one pop haptic per bridge, as it appears — the match is
+        // voiced by the bridges, not by the `.removed` events.
+        layer.onBridgeAppeared = { [weak self] in self?.haptics.bubblePopped() }
         addChild(layer)
         mergeLayers.append(layer)
         layer.play { [weak self, weak layer] in

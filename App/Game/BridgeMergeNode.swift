@@ -147,7 +147,7 @@ final class BridgeMergeNode: SKEffectNode {
     // (a bubble is 30 across), durations in seconds.
 
     /// Largest opening `v` a bridge reaches (see `BridgeShape`).
-    static let bridgeSpread: CGFloat = 0.35
+    static let bridgeSpread: CGFloat = 0.30
     /// Length of the Bézier handles, relative to the bubble radius.
     static let handleSize: CGFloat = 2.4
     /// How long one bridge takes to grow, eased in and out.
@@ -284,6 +284,13 @@ final class BridgeMergeNode: SKEffectNode {
     private let pixelsPerUnit: CGFloat
     private let blurFilter = CIFilter.gaussianBlur()
     private let animationKey = "bridgeMerge"
+
+    /// Called once per bridge, on the frame it first becomes visible (spec 43):
+    /// not when it is shown again or changes growth frame, so a cluster gets
+    /// exactly as many calls as it has bridges. The scene hooks the pop haptic
+    /// here. Left nil on the warm-up layer, which must stay silent. Called
+    /// from `render`, so it follows `timeScale` along with the wave.
+    var onBridgeAppeared: (() -> Void)?
 
     /// Takes over `bubbles` — the nodes of one matched cluster, all of one
     /// color, at their final scene positions — re-parenting them into the
@@ -476,6 +483,7 @@ final class BridgeMergeNode: SKEffectNode {
             // Frame 0 is the degenerate zero-width bridge: nothing to draw.
             let shown = frame <= 0 ? -1 : frame
             guard shown != bridges[index].shownFrame else { continue }
+            let appeared = bridges[index].shownFrame < 0 && shown >= 0
             bridges[index].shownFrame = shown
             if shown < 0 {
                 bridges[index].sprite.isHidden = true
@@ -483,6 +491,7 @@ final class BridgeMergeNode: SKEffectNode {
                 bridges[index].sprite.texture = Self.growth.frames[shown]
                 bridges[index].sprite.isHidden = false
             }
+            if appeared { onBridgeAppeared?() }
         }
 
         let dissolveStart = bridgesDoneAt + Self.holdAfterBridges
