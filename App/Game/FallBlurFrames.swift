@@ -5,7 +5,8 @@ import UIKit
 /// Pre-blurred bubble textures for the bubbles that fall off the board
 /// (spec 45): on the way down they blur into a cloud, with the same
 /// `CIGaussianBlur` and the same radius curve as the dissolve of a matched
-/// cluster (`BridgeMergeNode`).
+/// cluster (`BridgeMergeNode`), but up to a radius of their own: the cluster
+/// bursts much harder (spec 46), the fall keeps its softer cloud.
 ///
 /// A falling bubble is just a circle, so its blur is radially symmetric and
 /// the same for every bubble — the color comes from the sprite's tint. That is
@@ -30,6 +31,11 @@ import UIKit
 enum FallBlurFrames {
     // MARK: - Tuning (spec 45)
 
+    /// Blur radius of the last frame, logical units: well over a bubble's own
+    /// radius (15), so the falling bubble turns into a cloud rather than a
+    /// soft-edged circle. Independent of `BridgeMergeNode.maxBlurRadius`
+    /// (spec 46): the stronger burst is only for the matched section.
+    static let maxBlurRadius: CGFloat = 40
     /// Number of frames, frame 0 (no blur) included.
     static let frameCount = 24
     /// Side of every generated texture, pixels.
@@ -56,16 +62,16 @@ enum FallBlurFrames {
     static var isReady: Bool { !frames.isEmpty }
 
     /// Blur radius of frame `index`, logical units: from 0 (frame 0) to
-    /// `BridgeMergeNode.maxBlurRadius` (the last frame), in quadratic steps.
+    /// `maxBlurRadius` (the last frame), in quadratic steps.
     static func blurRadius(ofFrame index: Int) -> CGFloat {
         let t = CGFloat(index) / CGFloat(frameCount - 1)
-        return BridgeMergeNode.maxBlurRadius * t * t
+        return maxBlurRadius * t * t
     }
 
     /// The frame whose radius is the nearest to `radius` — the inverse of
     /// `blurRadius(ofFrame:)`.
     static func frameIndex(forRadius radius: CGFloat) -> Int {
-        let t = min(1, max(0, radius / BridgeMergeNode.maxBlurRadius))
+        let t = min(1, max(0, radius / maxBlurRadius))
         return Int((t.squareRoot() * CGFloat(frameCount - 1)).rounded())
     }
 
@@ -142,7 +148,7 @@ enum FallBlurFrames {
 
     /// The action that blurs a falling bubble over `duration` seconds: after
     /// `blurDelay` of it the radius follows `BridgeMergeNode`'s ease-out up to
-    /// its maximum over the remaining time, and
+    /// `maxBlurRadius` over the remaining time, and
     /// every time the nearest frame changes, the bubble's texture and size
     /// are swapped for it. The ring goes with the first blurred frame — a
     /// cloud has no outline. Run it alongside the fall and the fade. Nil when
@@ -155,7 +161,7 @@ enum FallBlurFrames {
             guard let bubble = node as? BubbleNode else { return }
             let progress = duration > 0 ? CGFloat(elapsed) / CGFloat(duration) : 1
             let blurProgress = (progress - blurDelay) / (1 - blurDelay)
-            let radius = BridgeMergeNode.maxBlurRadius * BridgeMergeNode.easeOut(blurProgress)
+            let radius = maxBlurRadius * BridgeMergeNode.easeOut(blurProgress)
             let index = frameIndex(forRadius: radius)
             guard index != shown, let frame = frame(at: index) else { return }
             shown = index
