@@ -12,12 +12,12 @@ enum Palette {
     /// compatibility via `rawValue`; the actual displayed color comes from
     /// `PaletteStore`, seeded from this array.
     static let defaultBubbleColors: [UInt32] = [
-        0x22BDFF, // blue
+        0x03C7FB, // blue
         0xFF4D66, // red
         0x87BD00, // green
         0xFFB847, // yellow
         0xB554FF, // purple
-        0xB36321  // lightblue
+        0x9D4E21  // lightblue
     ]
 
     /// Current color for a bubble slot. Reads live from `PaletteStore` so
