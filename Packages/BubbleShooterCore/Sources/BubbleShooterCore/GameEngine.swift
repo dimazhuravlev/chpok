@@ -201,6 +201,71 @@ public final class GameEngine {
         return true
     }
 
+    /// The path a shot fired toward `point` would take right now, without
+    /// firing it (spec 60): the ready bubble's position, every wall bounce
+    /// (two points each, see below), and where the bubble would arrive — the point it stops at before
+    /// snapping into its cell. Takes the very steps of `performLaunch`,
+    /// `updateLaunchedBubble` and `checkIfArrivedToPosition` on a scratch
+    /// position, quirks included, so the line can't disagree with the shot.
+    /// `nil` when there is no ready bubble or `point` is outside the input
+    /// area (`fire(toward:)` wouldn't fire either).
+    public func predictedPath(toward point: Vec2) -> [Vec2]? {
+        guard let ready = readyBubble, layout.containsInputPoint(point) else { return nil }
+        let angle = GameEngine.aimAngle(from: layout.cannonPivot, to: point)
+        let rad = (angle + 90) * Double.pi / 180
+        let velocity = Vec2(x: -GameConsts.launchPower * cos(rad), y: -GameConsts.launchPower * sin(rad))
+        return tracePath(from: ready.position, velocity: velocity)
+    }
+
+    private func tracePath(from start: Vec2, velocity initialVelocity: Vec2) -> [Vec2] {
+        var velocity = initialVelocity
+        var position = start
+        var path = [position]
+        let others = Array(bubbles.reversed())
+
+        for _ in 0..<GameEngine.maxPredictedSteps {
+            position.x += velocity.x
+            position.y += velocity.y
+            // A bounce clamps the overshoot back onto the wall, x only, so
+            // the flight meets the wall at one point and goes on from a
+            // point a little further along it: both go in the path.
+            for border in [GameConsts.rightBoardBorder, GameConsts.leftBoardBorder]
+            where border == GameConsts.rightBoardBorder ? position.x > border : position.x < border {
+                let t = (border - (position.x - velocity.x)) / velocity.x
+                path.append(Vec2(x: border, y: position.y - velocity.y + t * velocity.y))
+                velocity.x *= -1
+                position.x = border
+                path.append(position)
+            }
+
+            // `checkIfArrivedToPosition`: a trial step, then per bubble in
+            // reverse order a hit or — on the same iteration — the ceiling.
+            var trial = Vec2(x: position.x + velocity.x, y: position.y + velocity.y)
+            for stat in others {
+                if !stat.isBeingRemoved && stat.state == .onBoard
+                    && trial.distance(to: stat.position) < GameConsts.collisionDistance {
+                    trial.x -= 0.75 * velocity.x
+                    trial.y -= 0.75 * velocity.y
+                    path.append(trial)
+                    return path
+                } else if trial.y < GameConsts.bubbleSize {
+                    // The ceiling sets y, off the line of flight: the last
+                    // point on it goes in first.
+                    trial.y = GameConsts.ceilingSnapY
+                    path.append(position)
+                    path.append(trial)
+                    return path
+                }
+            }
+        }
+        path.append(position)
+        return path
+    }
+
+    /// Flight steps `predictedPath` gives up after — far more than any real
+    /// flight takes (the board is a few dozen steps tall).
+    static let maxPredictedSteps = 2000
+
     /// Direct-angle firing (clamped to `±maxAngleDegrees`). Not present in
     /// the original (which only ever fires from a screen point) — added per
     /// spec for deterministic tests.
