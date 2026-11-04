@@ -726,6 +726,7 @@ final class GameScene: SKScene {
     /// palette changes makes the repaint immediate and the dependency
     /// intentional rather than incidental.
     func repaintBubbles() {
+        backgroundColor = Palette.background
         let colorsById = Dictionary(uniqueKeysWithValues: engine.bubbles.map { ($0.id, $0.color) })
         for (id, node) in nodes {
             guard let bubbleNode = node as? BubbleNode, let color = colorsById[id] else { continue }

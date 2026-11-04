@@ -103,16 +103,17 @@ enum BridgeShape {
 /// The dissolve (specs 39, 40, 46, 48) is a pop — three things at once, over
 /// one short stretch of time: the whole figure swells sharply around its own
 /// center, bursts into a strong blur — a fast jerk at the start, then it keeps
-/// thinning out — and the tint of every part darkens to black, at a constant
+/// thinning out — and the tint of every part moves to the background color, at a constant
 /// rate. The swell is fastest at the very first moment, which is what reads as
 /// a bang. There is no easing in or out: the end of the effect is meant to be
 /// abrupt.
 ///
-/// The darkening lowers the tint rather than the opacity. SpriteKit applies
+/// The fade moves the tint rather than lowering the opacity. SpriteKit applies
 /// opacity to each node separately, so wherever a bridge tucks under a circle
 /// the overlap would show through as a denser patch while fading. The
-/// background under a cluster is pure black, so tinting everything to black
-/// looks the same as a group fade, minus the artifact.
+/// background under a cluster is one flat color (`Palette.background`, spec
+/// 56), so tinting everything to it looks the same as a group fade, minus
+/// the artifact.
 ///
 /// The blur is applied to the figure as one image, circles and bridges
 /// together, which is why the node is an `SKEffectNode`: parts blurred one by
@@ -599,7 +600,14 @@ final class BridgeMergeNode: SKEffectNode {
         let dark = dissolve
         guard dark != appliedDark else { return }
         appliedDark = dark
-        let tint = UIColor(red: red * (1 - dark), green: green * (1 - dark), blue: blue * (1 - dark), alpha: 1)
+        var bgRed: CGFloat = 0, bgGreen: CGFloat = 0, bgBlue: CGFloat = 0
+        Palette.background.getRed(&bgRed, green: &bgGreen, blue: &bgBlue, alpha: nil)
+        let tint = UIColor(
+            red: red * (1 - dark) + bgRed * dark,
+            green: green * (1 - dark) + bgGreen * dark,
+            blue: blue * (1 - dark) + bgBlue * dark,
+            alpha: 1
+        )
         for bubble in bubbles { bubble.color = tint }
         for bridge in bridges { bridge.sprite.color = tint }
     }

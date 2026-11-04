@@ -13,6 +13,7 @@ struct GameOverScreen: View {
     let info: GameOverInfo
     let onNewGame: () -> Void
 
+    @ObservedObject private var paletteStore = PaletteStore.shared
     @State private var colorIndex = 0
     @State private var timer: Timer?
 
@@ -48,6 +49,26 @@ struct GameOverScreen: View {
     /// Opacity of the standing-record line.
     private static let previousBestOpacity: Double = 0.3
 
+    /// Black or white, one for the whole set: whichever has the larger
+    /// minimum WCAG contrast over all six colors (black for `chpok`).
+    static func textColor(for colors: [UInt32]) -> Color {
+        func linear(_ byte: UInt32) -> Double {
+            let c = Double(byte & 0xFF) / 255
+            return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        let luminances = colors.map { 0.2126 * linear($0 >> 16) + 0.7152 * linear($0 >> 8) + 0.0722 * linear($0) }
+        let blackContrast = luminances.map { ($0 + 0.05) / 0.05 }.min() ?? 0
+        let whiteContrast = luminances.map { 1.05 / ($0 + 0.05) }.min() ?? 0
+        return blackContrast >= whiteContrast ? .black : .white
+    }
+
+    /// Whether the text is black, i.e. the status bar wants `.light`.
+    static func usesBlackText(for colors: [UInt32]) -> Bool {
+        textColor(for: colors) == .black
+    }
+
+    private var textColor: Color { Self.textColor(for: paletteStore.colors) }
+
     var body: some View {
         ZStack {
             Color(uiColor: Palette.color(for: Self.colors[colorIndex]))
@@ -56,7 +77,7 @@ struct GameOverScreen: View {
             VStack {
                 Text(info.title)
                     .font(.appSemiBold(32))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(textColor)
                     .accessibilityIdentifier("gameOverTitle")
                     .padding(.top, Self.titleTopPadding)
 
@@ -67,7 +88,7 @@ struct GameOverScreen: View {
                     onNewGame()
                 }
                 .font(.appSemiBold(32))
-                .foregroundStyle(.black)
+                .foregroundStyle(textColor)
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("okButton")
                 .padding(.bottom, 32)
@@ -105,13 +126,13 @@ struct GameOverScreen: View {
                 // record yet means no line at all, not a placeholder.
                 if let bestText = info.bestText {
                     Text(verbatim: "best time \(bestText)")
-                        .foregroundStyle(Color.black.opacity(Self.previousBestOpacity))
+                        .foregroundStyle(textColor.opacity(Self.previousBestOpacity))
                         .accessibilityIdentifier("gameOverBest")
                 }
             }
         }
         .font(.appSemiBold(32))
-        .foregroundStyle(.black)
+        .foregroundStyle(textColor)
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()

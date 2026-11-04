@@ -27,7 +27,10 @@ enum Palette {
         PaletteStore.shared.color(for: bubbleColor)
     }
 
-    static let background = UIColor(hex: 0x000000)
+    /// Background of the default (`chpok`) set.
+    static let defaultBackground: UInt32 = 0x000000
+    /// Current background; follows the selected palette set (spec 56).
+    static var background: UIColor { UIColor(hex: PaletteStore.shared.background) }
     static let text = UIColor(hex: 0xFFFFFF)
     static let overlayCard = UIColor(hex: 0x1C1C1E)
     static let overlayScrim = UIColor(white: 0, alpha: 0.6)

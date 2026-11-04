@@ -22,6 +22,9 @@ final class Haptics {
     /// in-game pop feedback.
     private let button = UIImpactFeedbackGenerator(style: .medium)
 
+    /// Gentle tick for picking a row in the palette-sets test sheet (spec 56).
+    private let selection = UISelectionFeedbackGenerator()
+
     func prepareForShot() {
         pop.prepare()
     }
@@ -32,6 +35,10 @@ final class Haptics {
 
     func bubblePopped() {
         pop.impactOccurred(intensity: 0.5)
+    }
+
+    func selectionChanged() {
+        selection.selectionChanged()
     }
 
     func buttonTapped() {

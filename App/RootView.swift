@@ -14,6 +14,9 @@ struct RootView: View {
     @State private var showGameOverDemo = CommandLine.arguments.contains("-showGameOverDemo")
 
     private var isShowingGameOver: Bool { showGameOverDemo || vm.gameOver != nil }
+    private var statusBarWantsDarkContent: Bool {
+        isShowingGameOver ? GameOverScreen.usesBlackText(for: paletteStore.colors) : paletteStore.isLight
+    }
     /// Shown on shake (spec 32), but only during active play — the palette
     /// sheet has no business appearing over the game-over screen, which has
     /// its own dedicated full-screen presentation and transition.
@@ -22,13 +25,19 @@ struct RootView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
-                HUDView(score: vm.score, livesLeft: vm.livesLeft, maxLives: vm.maxLives, onRestart: vm.restart)
+                HUDView(
+                        score: vm.score,
+                        livesLeft: vm.livesLeft,
+                        maxLives: vm.maxLives,
+                        onRestart: vm.restart,
+                        foreground: paletteStore.isLight ? .black : .white
+                    )
                 GeometryReader { geo in
                     ZStack {
                         if let scene = vm.scene {
                             SpriteView(scene: scene, options: [.ignoresSiblingOrder])
                         } else {
-                            Color(Palette.background)
+                            Color(uiColor: Palette.background)
                         }
                         Rectangle()
                             .fill(.clear)
@@ -80,15 +89,19 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        .background(Color(Palette.background).ignoresSafeArea())
-        // The game screen is black, so it wants light status-bar content;
-        // the game-over screen is a light palette color and wants dark.
-        .preferredColorScheme(isShowingGameOver ? .light : .dark)
+        .background(Color(uiColor: Palette.background).ignoresSafeArea())
+        // Light color scheme = dark status-bar content. Game screen: dark
+        // content on a light palette background, light on a dark one. The
+        // game-over screen follows its text: black text wants dark content.
+        .preferredColorScheme(statusBarWantsDarkContent ? .light : .dark)
         .onChange(of: scenePhase) { if $0 != .active { vm.persistIfPossible() } }
         // Live repaint (spec 32 step 3): whenever the palette changes, push
         // the new colors onto every bubble node that already exists instead
         // of waiting for them to be recreated.
+        // The background changes together with the colors (spec 56) and the
+        // scene repaints both.
         .onChange(of: paletteStore.colors) { _ in vm.scene?.repaintBubbles() }
+        .onChange(of: paletteStore.background) { vm.scene?.repaintBubbles() }
         .onShake {
             guard vm.gameOver == nil else { return }
             showPaletteSheet = true
