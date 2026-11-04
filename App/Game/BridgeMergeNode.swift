@@ -90,7 +90,8 @@ enum BridgeShape {
 /// every pair of neighbouring bubbles a bridge grows, in bursts: several at
 /// once, in random places kept apart from each other, the first one where the
 /// fired bubble hit; the number per burst grows with the size of the cluster,
-/// so a big one does not drag on (spec 50). When the last bridge is complete, the whole figure pops (below).
+/// so a big one does not drag on (spec 50). When the last bridge is complete,
+/// the whole figure pops (below).
 ///
 /// Bridges are sprites, not shapes: `SKShapeNode` is drawn almost without
 /// antialiasing in our scaled scene, a texture drawn by Core Graphics (with
@@ -165,8 +166,8 @@ final class BridgeMergeNode: SKEffectNode {
     /// How long one bridge takes to grow, eased in and out.
     static let bridgeGrowDuration: TimeInterval = 0.30
     /// Delay between two bursts of bridges (spec 50). With `E` bridges there
-    /// are `S = ceil(√E)` bursts of `k = ceil(E / S)` each, so the wave grows
-    /// as √E, not as E.
+    /// are `S = ceil(√E)` bursts of `k = ceil(E / S)` each, so the bridges'
+    /// phase grows as √E, not as E.
     static let edgeStagger: TimeInterval = 0.09
     /// Bridges of one burst start `0...burstJitter` apart at random, so the
     /// burst reads as simultaneous but its haptics do not collapse into one frame.
@@ -317,7 +318,7 @@ final class BridgeMergeNode: SKEffectNode {
     /// not when it is shown again or changes growth frame, so a cluster gets
     /// exactly as many calls as it has bridges. The scene hooks the pop haptic
     /// here. Left nil on the warm-up layer, which must stay silent. Called
-    /// from `render`, so it follows `timeScale` along with the wave.
+    /// from `render`, so it follows `timeScale` along with the bursts.
     var onBridgeAppeared: (() -> Void)?
 
     /// Takes over `bubbles` — the nodes of one matched cluster, all of one
@@ -448,7 +449,7 @@ final class BridgeMergeNode: SKEffectNode {
         guard total > 0 else { return [] }
 
         var neighbours = [Set<Int>](repeating: [], count: positions.count)
-        for edge in neighbourEdges(positions: positions) {
+        for edge in edges {
             neighbours[edge.a].insert(edge.b)
             neighbours[edge.b].insert(edge.a)
         }
