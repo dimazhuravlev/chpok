@@ -127,7 +127,7 @@ final class PaletteStore: ObservableObject {
         // Slots hold Display P3 coordinates (see `Palette`), so the picked
         // color is stored in P3 too — otherwise it would come back more
         // saturated than picked.
-        let picked = color.opaqueDisplayP3HexValue
+        let picked = Palette.usesDisplayP3 ? color.opaqueDisplayP3HexValue : color.opaqueHexValue
         // Slots hold dark-theme values; a color picked in the light theme is
         // stored as the dark color whose light counterpart it is.
         storedColors[bubbleColor.rawValue] = appearance == .light ? LightTheme.darkColor(for: picked) : picked

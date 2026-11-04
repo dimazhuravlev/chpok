@@ -224,7 +224,11 @@ final class GameScene: SKScene {
         // the same 0...255 components are read as Display P3 by the
         // compositor. Neutrals don't move; saturated colors reach the P3
         // gamut edge.
-        (view.layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.displayP3)
+        // Only where `Palette.usesDisplayP3`: iOS 18 shows the relabelled
+        // layer washed out (spec 63).
+        if Palette.usesDisplayP3 {
+            (view.layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.displayP3)
+        }
 
         if trajectoryNode.parent == nil { addChild(trajectoryNode) }
 

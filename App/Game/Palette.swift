@@ -6,10 +6,11 @@ import BubbleShooterCore
 /// Bubble colors are user-customizable (spec 32) — everything else below
 /// stays fixed.
 ///
-/// Every hex value here and in `PaletteSet` is a Display P3 coordinate, not
-/// sRGB: the game scene's layer is tagged Display P3 (`GameScene.didMove`)
-/// and is fed the raw numbers via `UIColor(hex:)`, while SwiftUI, which is
-/// color managed, gets the same numbers as P3 via `display(_:)`.
+/// Every hex value here and in `PaletteSet` is a Display P3 coordinate where
+/// `usesDisplayP3` holds (sRGB elsewhere): the game scene's layer is tagged
+/// Display P3 (`GameScene.didMove`) and is fed the raw numbers via
+/// `UIColor(hex:)`, while SwiftUI, which is color managed, gets the same
+/// numbers as P3 via `display(_:)`.
 enum Palette {
     /// Original six bubble colors, indexed by `BubbleColor.rawValue` — the
     /// starting palette, and what "reset colors" restores. Case names below
@@ -48,10 +49,26 @@ enum Palette {
         PaletteStore.shared.displayColor(for: bubbleColor)
     }
 
+    /// Whether the game scene's layer is tagged Display P3, so hex values
+    /// are read as P3 everywhere. On an iPhone 13 Pro with iOS 18.6 the
+    /// P3-tagged SpriteKit layer comes out washed out on the panel, as if
+    /// under a grey veil, while screenshots look right (spec 63) — so the
+    /// relabel is used only from iOS 26, where it was checked on a device;
+    /// earlier systems stay sRGB. Launch arguments `-displayP3` and
+    /// `-noDisplayP3` force either way, to compare on a device.
+    static let usesDisplayP3: Bool = {
+        let arguments = CommandLine.arguments
+        if arguments.contains("-noDisplayP3") { return false }
+        if arguments.contains("-displayP3") { return true }
+        if #available(iOS 26, *) { return true }
+        return false
+    }()
+
     /// The color SwiftUI should draw for `hex` to match the game scene: the
-    /// same numbers, read as Display P3.
+    /// same numbers, read as Display P3 (or sRGB, see `usesDisplayP3`).
     static func display(_ hex: UInt32) -> UIColor {
-        UIColor(
+        guard usesDisplayP3 else { return UIColor(hex: hex) }
+        return UIColor(
             displayP3Red: CGFloat((hex >> 16) & 0xFF) / 255,
             green: CGFloat((hex >> 8) & 0xFF) / 255,
             blue: CGFloat(hex & 0xFF) / 255,
