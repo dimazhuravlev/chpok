@@ -86,10 +86,10 @@ enum BridgeShape {
 /// The effect that plays when a cluster of three or more bubbles matches
 /// (spec 38, replacing the blur-based gooey merge of spec 37).
 ///
-/// The bubbles do not move and do not change size. Between every pair of
-/// neighbouring bubbles a bridge grows, one after another in a wave that
-/// starts at the bubble that was just fired and spreads through the cluster;
-/// when the last bridge is complete, the whole figure dissolves in place.
+/// During the growth the bubbles do not move and do not change size. Between
+/// every pair of neighbouring bubbles a bridge grows, one after another in a
+/// wave that starts at the bubble that was just fired and spreads through the
+/// cluster; when the last bridge is complete, the whole figure pops (below).
 ///
 /// Bridges are sprites, not shapes: `SKShapeNode` is drawn almost without
 /// antialiasing in our scaled scene, a texture drawn by Core Graphics (with
@@ -98,11 +98,13 @@ enum BridgeShape {
 /// the same up to rotation: the growth frames are drawn once, for a horizontal
 /// pair, and shared by all bridges of all effects.
 ///
-/// The dissolve (specs 39, 40, 46) is two things at once, over one short
-/// stretch of time: the figure bursts into a strong blur — a fast jerk at the
-/// start, then it keeps thinning out — and the tint of every part darkens to
-/// black, at a constant rate. There is no easing in or out: the end of the
-/// effect is meant to be abrupt.
+/// The dissolve (specs 39, 40, 46, 48) is a pop — three things at once, over
+/// one short stretch of time: the whole figure swells sharply around its own
+/// center, bursts into a strong blur — a fast jerk at the start, then it keeps
+/// thinning out — and the tint of every part darkens to black, at a constant
+/// rate. The swell is fastest at the very first moment, which is what reads as
+/// a bang. There is no easing in or out: the end of the effect is meant to be
+/// abrupt.
 ///
 /// The darkening lowers the tint rather than the opacity. SpriteKit applies
 /// opacity to each node separately, so wherever a bridge tucks under a circle
@@ -135,6 +137,12 @@ enum BridgeShape {
 /// sprite, larger than the cluster by `bufferMargin` all around, keeps the
 /// edge out of reach.
 ///
+/// The swell is the layer's own transform, not a change to its children: the
+/// buffer is drawn in local units, so its size (the `bufferMargin` spacer)
+/// does not grow with the scale, nothing is reallocated per frame, and what is
+/// stretched is the finished, already blurred image — the loss of sharpness
+/// hides under the blur.
+///
 /// The first CI blur of a launch stalls for a few hundred milliseconds while
 /// the filter pipeline is set up; `warmUp(in:pixelsPerUnit:)` pays that once,
 /// off screen, after the game has finished fading in.
@@ -164,6 +172,11 @@ final class BridgeMergeNode: SKEffectNode {
     /// rather than melts. The blur eases out, the darkening is linear and
     /// starts together with it.
     static let fadeDuration: TimeInterval = 0.25
+    /// How many times larger the figure is at the end of the dissolve (spec 48),
+    /// around its own center. The blur radius is not compensated for it: on
+    /// screen the cloud ends this much bigger as well, part of the burst. The
+    /// swell eases out cubically, so nearly all of it happens at the start.
+    static let popScale: CGFloat = 1.5
     /// Blur radius the dissolve ends at (specs 39-42, 46), logical units: eight
     /// times a bubble's own radius (15), so the figure does not just go soft —
     /// it bursts into a cloud. It eases out over the dissolve, so most of the
@@ -285,6 +298,10 @@ final class BridgeMergeNode: SKEffectNode {
     private var appliedDark: CGFloat = 0
     /// Blur radius currently applied, logical units.
     private var appliedRadius: CGFloat = 0
+    /// Scale of the layer relative to its resting `1 / pixelsPerUnit`, 1...popScale.
+    private var appliedPop: CGFloat = 1
+    /// Mean of the bubbles' scene positions: the point the figure swells around.
+    private let center: CGPoint
     /// Device pixels per logical unit. See the class comment.
     private let pixelsPerUnit: CGFloat
     private let blurFilter = CIFilter.gaussianBlur()
@@ -314,6 +331,16 @@ final class BridgeMergeNode: SKEffectNode {
             startIndex: startIndex
         )
         bridgesDoneAt = edges.isEmpty ? 0 : Double(edges.count - 1) * Self.edgeStagger + Self.bridgeGrowDuration
+        // Scene coordinates, before the bubbles move into pixel space below.
+        if bubbles.isEmpty {
+            center = .zero
+        } else {
+            let count = CGFloat(bubbles.count)
+            center = CGPoint(
+                x: bubbles.reduce(0) { $0 + $1.position.x } / count,
+                y: bubbles.reduce(0) { $0 + $1.position.y } / count
+            )
+        }
 
         super.init()
         zPosition = Self.layerZPosition
@@ -513,6 +540,15 @@ final class BridgeMergeNode: SKEffectNode {
             if radius > 0 { Self.isWarm = true }
         }
 
+        // The swell: with the layer at `s / unit` and shifted by `center · (1 - s)`
+        // the center stays where it was (its local point is `center · unit`).
+        let pop = 1 + (Self.popScale - 1) * Self.easeOutCubic(dissolve)
+        if pop != appliedPop {
+            appliedPop = pop
+            setScale(pop / pixelsPerUnit)
+            position = CGPoint(x: center.x * (1 - pop), y: center.y * (1 - pop))
+        }
+
         let dark = dissolve
         guard dark != appliedDark else { return }
         appliedDark = dark
@@ -525,6 +561,13 @@ final class BridgeMergeNode: SKEffectNode {
     private static func smooth(_ t: CGFloat) -> CGFloat {
         let clamped = min(1, max(0, t))
         return clamped * clamped * (3 - 2 * clamped)
+    }
+
+    /// Cubic ease-out clamped to 0...1: the fastest start of the curves here.
+    /// Drives the swell of the pop.
+    private static func easeOutCubic(_ t: CGFloat) -> CGFloat {
+        let rest = 1 - min(1, max(0, t))
+        return 1 - rest * rest * rest
     }
 
     /// Quadratic ease-out clamped to 0...1: fast start, slow end. Shared with
