@@ -22,7 +22,27 @@ enum Fonts {
     }()
 }
 
+/// Which font the whole app is set in (spec 55, a test). Pretendard stays
+/// bundled and registered; the launch argument `-pretendard` switches back
+/// to it for a side-by-side comparison without rebuilding. To switch for
+/// good, change the default branch of `current` (and drop the argument).
+enum AppFont {
+    case sfRounded
+    case pretendard
+
+    static let current: AppFont = CommandLine.arguments.contains("-pretendard") ? .pretendard : .sfRounded
+}
+
 extension Font {
+    /// Semibold in the app's current font (see `AppFont`); every text in the
+    /// app goes through this.
+    static func appSemiBold(_ size: CGFloat) -> Font {
+        switch AppFont.current {
+        case .sfRounded: Font.system(size: size, weight: .semibold, design: .rounded)
+        case .pretendard: pretendardSemiBold(size)
+        }
+    }
+
     /// Pretendard-SemiBold at the given size; falls back to the system font
     /// automatically if the custom font never registered.
     static func pretendardSemiBold(_ size: CGFloat) -> Font {

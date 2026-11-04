@@ -38,7 +38,9 @@ struct GameOverScreen: View {
     // for the second pair that is a *negative* stack spacing. The first pair
     // is 0.78pt more than 56 between baselines: the dot of the "i" that tops
     // the lines below stands 0.78pt higher than the tallest digits of the
-    // score line.
+    // score line. (All of this is tuned to Pretendard; with SF Rounded the
+    // lines may sit slightly differently, so re-check the spacings below when
+    // switching to it for good — spec 55 left them untouched for the test.)
     /// Gap between the score line and the time line.
     private static let scoreToTimeSpacing: CGFloat = 18.6
     /// Gap between the time line and the previous-best line (negative: see above).
@@ -53,7 +55,7 @@ struct GameOverScreen: View {
 
             VStack {
                 Text(info.title)
-                    .font(.pretendardSemiBold(32))
+                    .font(.appSemiBold(32))
                     .foregroundStyle(.black)
                     .accessibilityIdentifier("gameOverTitle")
                     .padding(.top, Self.titleTopPadding)
@@ -64,7 +66,7 @@ struct GameOverScreen: View {
                     Haptics.shared.buttonTapped()
                     onNewGame()
                 }
-                .font(.pretendardSemiBold(32))
+                .font(.appSemiBold(32))
                 .foregroundStyle(.black)
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("okButton")
@@ -108,7 +110,7 @@ struct GameOverScreen: View {
                 }
             }
         }
-        .font(.pretendardSemiBold(32))
+        .font(.appSemiBold(32))
         .foregroundStyle(.black)
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

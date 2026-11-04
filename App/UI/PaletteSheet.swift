@@ -59,7 +59,7 @@ struct PaletteSheet: View {
                 Haptics.shared.buttonTapped()
                 store.resetToDefaults()
             }
-            .font(.pretendardSemiBold(32))
+            .font(.appSemiBold(32))
             .tint(.white)
             .foregroundStyle(.white)
             .buttonStyle(.plain)

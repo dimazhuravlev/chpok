@@ -13,7 +13,7 @@ struct HUDView: View {
         ZStack {
             HStack {
                 Text(verbatim: String(score))
-                    .font(.pretendardSemiBold(32))
+                    .font(.appSemiBold(32))
                     .monospacedDigit()
                     .contentTransition(.numericText(value: Double(score)))
                     .animation(.snappy, value: score)
@@ -24,7 +24,7 @@ struct HUDView: View {
                     Haptics.shared.buttonTapped()
                     onRestart()
                 }
-                .font(.pretendardSemiBold(32))
+                .font(.appSemiBold(32))
                 .tint(.white)
                 .foregroundStyle(.white)
                 .buttonStyle(.plain)
