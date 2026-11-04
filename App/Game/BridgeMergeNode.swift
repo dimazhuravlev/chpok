@@ -173,25 +173,26 @@ final class BridgeMergeNode: SKEffectNode {
     /// starts together with it.
     static let fadeDuration: TimeInterval = 0.25
     /// How many times larger the figure is at the end of the dissolve (spec 48),
-    /// around its own center. The blur radius is not compensated for it: on
-    /// screen the cloud ends this much bigger as well, part of the burst. The
-    /// swell eases out cubically, so nearly all of it happens at the start.
+    /// around its own center. The blur is drawn in the buffer, which the swell
+    /// stretches, so the radius handed to the filter is divided by the current
+    /// swell (`render`): `maxBlurRadius` is what the viewer sees. The swell
+    /// eases out cubically, so nearly all of it happens at the start.
     static let popScale: CGFloat = 1.5
-    /// Blur radius the dissolve ends at (specs 39-42, 46), logical units: eight
-    /// times a bubble's own radius (15), so the figure does not just go soft —
-    /// it bursts into a cloud. It eases out over the dissolve, so most of the
+    /// Blur radius the dissolve ends at (specs 39-42, 46, 49), logical units
+    /// *on screen*, swell included: four times a bubble's own radius (15), so
+    /// the figure bursts into a cloud that stays near the figure and does not
+    /// smear far to the sides. It eases out over the dissolve, so most of the
     /// spread happens in the first moments. The bubbles that fall off the board
     /// blur less, with a maximum of their own (`FallBlurFrames.maxBlurRadius`).
-    static let maxBlurRadius: CGFloat = 120
+    static let maxBlurRadius: CGFloat = 60
     /// Empty space kept around the figure inside the effect's buffer, logical
     /// units (see the class comment): the cloud is cut off by a straight line
-    /// if it reaches the buffer's edge. The kernel reaches 3 σ, and 240 covers
-    /// that up to σ = 80. Past it the margin is shorter than 3 σ, but by then
-    /// the cloud is so thin and dark that what the kernel's tail leaves beyond
-    /// 240 units from the figure is below about 0.01 of alpha — no cut is
-    /// visible. The full 3 × `maxBlurRadius` = 360 would more than double the
-    /// buffer's area, and the buffer is redrawn every frame.
-    static let bufferMargin: CGFloat = 240
+    /// if it reaches the buffer's edge. The kernel reaches 3 σ. The radius in
+    /// the buffer is the on-screen one divided by the swell, at most
+    /// `maxBlurRadius / popScale` = 40 (at the end), so 120 = 3 σ covers the
+    /// whole dissolve and the cloud is never cut. A bigger margin would only
+    /// enlarge the buffer, and it is redrawn every frame.
+    static let bufferMargin: CGFloat = 120
     /// Number of pre-drawn growth frames (`v` from 0 to `bridgeSpread`).
     static let bridgeTextureSteps = 36
     /// Two bubbles are neighbours when their centers are closer than this
@@ -296,7 +297,7 @@ final class BridgeMergeNode: SKEffectNode {
     private let bridgesDoneAt: TimeInterval
     /// Darkening currently applied to the tint, 0...1.
     private var appliedDark: CGFloat = 0
-    /// Blur radius currently applied, logical units.
+    /// On-screen blur radius currently applied, logical units.
     private var appliedRadius: CGFloat = 0
     /// Scale of the layer relative to its resting `1 / pixelsPerUnit`, 1...popScale.
     private var appliedPop: CGFloat = 1
@@ -529,20 +530,22 @@ final class BridgeMergeNode: SKEffectNode {
         let dissolveStart = bridgesDoneAt + Self.holdAfterBridges
         let dissolve = min(1, max(0, CGFloat((time - dissolveStart) / Self.fadeDuration)))
 
+        // The swell: with the layer at `s / unit` and shifted by `center · (1 - s)`
+        // the center stays where it was (its local point is `center · unit`).
+        let pop = 1 + (Self.popScale - 1) * Self.easeOutCubic(dissolve)
+
         // The blur is a quick jerk and then slows down, the darkening is
         // linear. Effects are on from the first frame of the dissolve and not
-        // before.
+        // before. `radius` is on screen; the buffer is stretched by `pop`
+        // afterwards, so the filter gets it divided by `pop`.
         let radius = Self.maxBlurRadius * Self.easeOut(dissolve)
         if radius != appliedRadius {
             appliedRadius = radius
-            blurFilter.radius = Float(radius * pixelsPerUnit)
+            blurFilter.radius = Float(radius / pop * pixelsPerUnit)
             shouldEnableEffects = radius > 0
             if radius > 0 { Self.isWarm = true }
         }
 
-        // The swell: with the layer at `s / unit` and shifted by `center · (1 - s)`
-        // the center stays where it was (its local point is `center · unit`).
-        let pop = 1 + (Self.popScale - 1) * Self.easeOutCubic(dissolve)
         if pop != appliedPop {
             appliedPop = pop
             setScale(pop / pixelsPerUnit)
