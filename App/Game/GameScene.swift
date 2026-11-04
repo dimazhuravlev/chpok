@@ -43,7 +43,7 @@ final class GameScene: SKScene {
     /// Blur radius reached by the end of a pop's collapse, logical units: a
     /// bubble's own radius is about 15, so 8 is a light blur, not a cloud
     /// like the fall's. Drawn with the pre-blurred `FallBlurFrames`.
-    private let popBlurRadius: CGFloat = 8
+    private let popBlurRadius: CGFloat = 16
 
     private let engine: GameEngine
     private let geometry: SceneGeometry
@@ -193,6 +193,20 @@ final class GameScene: SKScene {
     }
 
     // MARK: - Frame loop
+
+    private var afterNextFrame: (() -> Void)?
+
+    /// One-shot callback fired once the scene has run a frame (spec 54): lets
+    /// the restart fade-in wait until the rebuilt board is what gets drawn.
+    func runAfterNextFrame(_ block: @escaping () -> Void) {
+        afterNextFrame = block
+    }
+
+    override func didFinishUpdate() {
+        guard let block = afterNextFrame else { return }
+        afterNextFrame = nil
+        block()
+    }
 
     override func update(_ currentTime: TimeInterval) {
         let dt: TimeInterval

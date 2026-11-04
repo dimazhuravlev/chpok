@@ -108,10 +108,6 @@ final class GameViewModel: ObservableObject {
     /// `RootView` blocks input on the game container meanwhile, and
     /// `restart()` ignores repeated taps.
     @Published var isRestarting = false
-    /// Mirrors `scene.isPaused` into `SpriteView`'s own `isPaused` parameter,
-    /// so the view can't un-pause the scene behind the model's back while the
-    /// restart fade-out is running (spec 53).
-    @Published var isScenePaused = false
     /// Exact format `bubbles:<N> score:<S> lives:<L>`, N = `engine.boardBubbles.count`.
     @Published var status: String = "bubbles:0 score:0 lives:5"
 
@@ -290,6 +286,10 @@ final class GameViewModel: ObservableObject {
     /// new game fades in over `restartFadeInDuration`. The scene is paused for
     /// the fade-out so a bubble in flight can't land (or end the match) in the
     /// middle of the transition, and input is off until the fade-in is done.
+    /// Only `scene.isPaused` is used, not the `SKView`'s own pause: a paused
+    /// view keeps showing its last drawn frame (the old board), so the fade-in
+    /// would start on it. The fade-in starts from `runAfterNextFrame`, once
+    /// the scene has run a frame with the rebuilt board (spec 54).
     /// Only reachable during active play — the header sits behind the
     /// game-over screen once it's showing — but `gameOver = nil` stays in the
     /// reset, as before.
@@ -297,7 +297,6 @@ final class GameViewModel: ObservableObject {
         guard let engine, let scene, !isRestarting else { return }
         isRestarting = true
         scene.isPaused = true
-        isScenePaused = true
         withAnimation(.easeInOut(duration: Self.restartFadeOutDuration), completionCriteria: .logicallyComplete) {
             gameOpacity = 0
         } completion: { [weak self] in
@@ -307,13 +306,15 @@ final class GameViewModel: ObservableObject {
                 self.gameOver = nil
             }
             scene.rebuild()
-            scene.isPaused = false
-            isScenePaused = false
-            withAnimation(.easeInOut(duration: Self.restartFadeInDuration), completionCriteria: .logicallyComplete) {
-                self.gameOpacity = 1
-            } completion: { [weak self] in
-                self?.isRestarting = false
+            scene.runAfterNextFrame { [weak self] in
+                guard let self else { return }
+                withAnimation(.easeInOut(duration: Self.restartFadeInDuration), completionCriteria: .logicallyComplete) {
+                    self.gameOpacity = 1
+                } completion: { [weak self] in
+                    self?.isRestarting = false
+                }
             }
+            scene.isPaused = false
         }
     }
 

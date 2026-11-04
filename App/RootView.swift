@@ -26,7 +26,7 @@ struct RootView: View {
                 GeometryReader { geo in
                     ZStack {
                         if let scene = vm.scene {
-                            SpriteView(scene: scene, isPaused: vm.isScenePaused, options: [.ignoresSiblingOrder])
+                            SpriteView(scene: scene, options: [.ignoresSiblingOrder])
                         } else {
                             Color(Palette.background)
                         }
