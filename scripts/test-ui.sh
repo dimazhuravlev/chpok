@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-UDID="82760CFF-E851-48E3-8909-A2541FCB87D3"
+UDID="$(scripts/sim-udid.sh)"
 LOG="build/xcodebuild-test.log"
 
 mkdir -p build
