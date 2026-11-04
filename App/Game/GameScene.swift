@@ -91,6 +91,13 @@ final class GameScene: SKScene {
     /// bounce (the core reports none), and the landing squashes along the
     /// last value (the engine may already have dropped the bubble by then).
     private var flightVelocities: [Int: CGVector] = [:]
+    /// The launched bubble itself, keyed by `Bubble.id`. The engine keeps
+    /// updating its `velocity` until it lands and never clears it, so the
+    /// landing reads the final velocity from here — right even when the shot
+    /// bounces off a wall and lands within the same frame, which the per-frame
+    /// `flightVelocities` would miss — and still has it after a match has
+    /// already dropped the bubble from `engine.bubbles`.
+    private var flightBubbles: [Int: Bubble] = [:]
 
     var onScoreChanged: ((Int) -> Void)?
     var onGameOver: ((Bool, Int, Int, Int) -> Void)?
@@ -376,6 +383,7 @@ final class GameScene: SKScene {
               let bubble = engine.bubbles.first(where: { $0.id == id }) else { return }
         let velocity = sceneVelocity(of: bubble)
         flightVelocities[id] = velocity
+        flightBubbles[id] = bubble
         jelly.launch(node, direction: velocity)
     }
 
@@ -397,7 +405,9 @@ final class GameScene: SKScene {
     /// front of the blow squash more. Only resting board bubbles with a node
     /// of their own take part (not falling ones, not those in a merge layer).
     private func squashOnLanding(id: Int, removedPositions: [Int: Vec2]) {
-        guard let velocity = flightVelocities.removeValue(forKey: id) else { return }
+        let lastFrameVelocity = flightVelocities.removeValue(forKey: id)
+        let finalVelocity = flightBubbles.removeValue(forKey: id).map { sceneVelocity(of: $0) }
+        guard let velocity = finalVelocity ?? lastFrameVelocity else { return }
         if let node = nodes[id] as? BubbleNode {
             jelly.clearTarget(node)
             jelly.impulse(node, direction: velocity, peak: BubbleJelly.landingSquash)
@@ -555,6 +565,7 @@ final class GameScene: SKScene {
         lastLandedId = nil
         jelly.reset()
         flightVelocities.removeAll()
+        flightBubbles.removeAll()
         nodes.removeAll()
         dying.removeAll()
         targets.removeAll()
