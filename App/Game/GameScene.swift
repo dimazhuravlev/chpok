@@ -4,7 +4,40 @@ import BubbleShooterCore
 /// Renders one `GameEngine` and forwards its events as callbacks. Owns no
 /// game logic itself — every frame it ticks the engine at a fixed 15ms step,
 /// mirrors `engine.bubbles` into `SKNode`s, and animates removals.
+///
+/// Spec 51: a matched cluster disappears in one of two ways, chosen once for
+/// the whole scene by `matchEffect`. By default (`.pops`) every bubble of the
+/// cluster flashes and pops on its own `.removed` event, one after another —
+/// the engine releases them ~70 ms apart, bottom to top — as before the
+/// bridges. The bridge merge effect (`.bridges`, specs 38-43) is the
+/// alternative, switched on with the `-bridgeMerge` launch argument.
 final class GameScene: SKScene {
+    /// How a matched cluster disappears (spec 51).
+    enum MatchEffect {
+        /// Each bubble flashes and pops on its own `.removed`, one by one.
+        case pops
+        /// The cluster merges through blurred bridges (`BridgeMergeNode`).
+        case bridges
+    }
+
+    /// The effect in use. `.pops` by default; the `-bridgeMerge` launch
+    /// argument (scheme arguments, or `xcrun simctl launch ... -bridgeMerge`)
+    /// switches to `.bridges`. For a TestFlight build, change the default
+    /// here: swap the two cases of the ternary.
+    static let matchEffect: MatchEffect =
+        CommandLine.arguments.contains("-bridgeMerge") ? .bridges : .pops
+
+    // MARK: - Match pop tuning (spec 51)
+
+    /// Flash phase of a pop: the bubble swells and lightens toward white.
+    private let flashDuration: TimeInterval = 0.08
+    /// Collapse phase of a pop: scale and opacity run to zero together.
+    private let popFadeDuration: TimeInterval = 0.12
+    /// Scale reached at the flash's peak (the node's normal scale is 1).
+    private let flashScale: CGFloat = 1.18
+    /// How far the fill lightens toward white at the flash's peak.
+    private let flashLightenFraction: CGFloat = 0.35
+
     private let engine: GameEngine
     private let geometry: SceneGeometry
     private let haptics = Haptics.shared
@@ -123,6 +156,10 @@ final class GameScene: SKScene {
         // Spec 45: draw the pre-blurred frames of the falling bubbles in the
         // background; nothing here waits for them.
         FallBlurFrames.prepare()
+
+        // Spec 51: the pops never touch Core Image blur, so there is nothing
+        // to warm up (and no warm-up stall) unless the bridges are in use.
+        guard Self.matchEffect == .bridges else { return }
 
         // Spec 39: pay the dissolve blur's one-time setup cost while the
         // player is looking at the board, not in the middle of the first pop.
@@ -342,6 +379,9 @@ final class GameScene: SKScene {
                 lastLandedId = id
                 squashOnLanding(id: id, removedPositions: removedPositions)
             case let .clusterMatched(ids, color):
+                // Spec 51: in `.pops` the cluster's nodes stay where they are
+                // and pop one by one on their own `.removed` events.
+                guard Self.matchEffect == .bridges else { break }
                 startBridgeMerge(ids: ids, color: color, removedPositions: removedPositions)
             case let .removed(id, _, _, _, reason):
                 animateRemoval(id: id, reason: reason)
@@ -508,15 +548,18 @@ final class GameScene: SKScene {
         }
     }
 
+    /// Removal animation of one bubble. A matched bubble pops (spec 51) — a
+    /// flash, then a collapse — in the default `.pops` mode; with `.bridges`
+    /// (spec 38) a match has no animation of its own here: a bubble that went
+    /// into a bridge merge layer is animated by that layer, so its `.removed`
+    /// only checks it off, which is also what lets `sync()` trust
+    /// `engine.bubbles` for this id again. (Any other match-removed node in
+    /// that mode — in practice there is none, the engine announces the whole
+    /// cluster before its first removal — is dropped by `sync()`, as its id is
+    /// gone from `engine.bubbles`.) A hanging bubble falls in both modes.
     private func animateRemoval(id: Int, reason: RemovalReason) {
-        // Spec 38: a match removal has no animation of its own any more. A
-        // bubble that went into a bridge merge layer is animated by that
-        // layer, so its `.removed` only checks it off — which is also what
-        // lets `sync()` trust `engine.bubbles` for this id again. (Any other
-        // match-removed node — in practice there is none, the engine
-        // announces the whole cluster before its first removal — is simply
-        // dropped by `sync()`, as its id is gone from `engine.bubbles`.)
-        if mergeIds.remove(id) != nil || reason == .match { return }
+        if mergeIds.remove(id) != nil { return }
+        if reason == .match && Self.matchEffect == .bridges { return }
 
         guard let node = nodes.removeValue(forKey: id) else { return }
         dying.insert(id)
@@ -535,6 +578,12 @@ final class GameScene: SKScene {
             self?.dying.remove(id)
         }
 
+        if reason == .match, let bubble = node as? BubbleNode {
+            haptics.bubblePopped()
+            bubble.run(popAction(for: bubble, cleanup: cleanup))
+            return
+        }
+
         let fallDuration: TimeInterval = 0.45
         var fallActions = [
             SKAction.moveBy(x: 0, y: -300, duration: fallDuration),
@@ -547,6 +596,58 @@ final class GameScene: SKScene {
             fallActions.append(blur)
         }
         node.run(SKAction.sequence([SKAction.group(fallActions), cleanup]))
+    }
+
+    /// Spec 51: one bubble's pop — `flashDuration` of swelling to `flashScale`
+    /// and lightening, then `popFadeDuration` of collapsing to nothing. The
+    /// scale goes through `BubbleNode.baseScale`, not `setScale` or
+    /// `SKAction.scale`: `BubbleJelly` writes the node's transform every
+    /// frame on top of `baseScale`, so a direct scale would fight it — and
+    /// this way a squash that is still settling plays on under the pop. The
+    /// haptic fires as the pop starts, one per bubble.
+    private func popAction(for bubble: BubbleNode, cleanup: SKAction) -> SKAction {
+        let base = bubble.color
+        let lit = Self.lightened(base, by: flashLightenFraction)
+        var baseR: CGFloat = 0, baseG: CGFloat = 0, baseB: CGFloat = 0, baseA: CGFloat = 0
+        base.getRed(&baseR, green: &baseG, blue: &baseB, alpha: &baseA)
+        var litR: CGFloat = 0, litG: CGFloat = 0, litB: CGFloat = 0, litA: CGFloat = 0
+        lit.getRed(&litR, green: &litG, blue: &litB, alpha: &litA)
+
+        let flashDuration = flashDuration
+        let popFadeDuration = popFadeDuration
+        let peak = flashScale
+
+        let flash = SKAction.customAction(withDuration: flashDuration) { node, elapsed in
+            guard let bubble = node as? BubbleNode else { return }
+            // Progress 0...1, eased out slightly so the flash settles rather
+            // than arriving at a constant rate.
+            let t = flashDuration > 0 ? min(1, max(0, CGFloat(elapsed) / CGFloat(flashDuration))) : 1
+            let eased = t * (2 - t)
+            bubble.baseScale = 1 + (peak - 1) * eased
+            bubble.color = SKColor(
+                red: baseR + (litR - baseR) * eased,
+                green: baseG + (litG - baseG) * eased,
+                blue: baseB + (litB - baseB) * eased,
+                alpha: baseA + (litA - baseA) * eased
+            )
+        }
+        let collapse = SKAction.customAction(withDuration: popFadeDuration) { node, elapsed in
+            guard let bubble = node as? BubbleNode else { return }
+            let t = popFadeDuration > 0 ? min(1, max(0, CGFloat(elapsed) / CGFloat(popFadeDuration))) : 1
+            bubble.baseScale = peak * (1 - t)
+        }
+        let shrinkAndFade = SKAction.group([collapse, SKAction.fadeOut(withDuration: popFadeDuration)])
+        return SKAction.sequence([flash, shrinkAndFade, cleanup])
+    }
+
+    /// `color` moved `fraction` of the way toward white.
+    private static func lightened(_ color: SKColor, by fraction: CGFloat) -> SKColor {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return SKColor(
+            red: r + (1 - r) * fraction, green: g + (1 - g) * fraction,
+            blue: b + (1 - b) * fraction, alpha: a
+        )
     }
 
     private func performBoardReset() {
