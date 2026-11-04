@@ -41,7 +41,9 @@ final class GameScene: SKScene {
     // MARK: - Pop blur tuning (spec 52)
 
     /// Blur radius reached by the end of a pop's collapse, logical units: a
-    /// bubble's own radius is about 15, so 8 is a light blur, not a cloud
+    /// bubble's own radius is about 15. The blur shrinks along with the
+    /// collapsing bubble, so it takes about the bubble's own radius (16,
+    /// spec 54; 8 did not show) to read as a soft pop rather than a cloud
     /// like the fall's. Drawn with the pre-blurred `FallBlurFrames`.
     private let popBlurRadius: CGFloat = 16
 
