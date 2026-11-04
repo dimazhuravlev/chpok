@@ -60,8 +60,8 @@ struct PaletteSheet: View {
                 store.resetToDefaults()
             }
             .font(.appSemiBold(32))
-            .tint(.white)
-            .foregroundStyle(.white)
+            .tint(.primary)
+            .foregroundStyle(.primary)
             .buttonStyle(.plain)
             // Dimmed when there's nothing to reset (owner feedback); still
             // tappable — resetting an already-default palette to itself is
@@ -86,7 +86,9 @@ struct PaletteSheet: View {
         .accessibilityIdentifier("paletteSheet")
         .presentationDetents([.height(contentHeight)])
         .presentationDragIndicator(.visible)
-        .preferredColorScheme(.dark)
+        // Follows the theme (spec 57): dark sheet, white text in the dark
+        // theme; light sheet, black text in the light one.
+        .preferredColorScheme(store.appearance == .light ? .light : .dark)
         .onAppear {
             Haptics.shared.prepareForButton()
         }

@@ -5,6 +5,11 @@ import BubbleShooterCore
 /// Flat, minimalist color palette for the whole app (see spec "Минимализм").
 /// Bubble colors are user-customizable (spec 32) — everything else below
 /// stays fixed.
+///
+/// Every hex value here and in `PaletteSet` is a Display P3 coordinate, not
+/// sRGB: the game scene's layer is tagged Display P3 (`GameScene.didMove`)
+/// and is fed the raw numbers via `UIColor(hex:)`, while SwiftUI, which is
+/// color managed, gets the same numbers as P3 via `display(_:)`.
 enum Palette {
     /// Original six bubble colors, indexed by `BubbleColor.rawValue` — the
     /// starting palette, and what "reset colors" restores. Case names below
@@ -29,7 +34,8 @@ enum Palette {
 
     /// Background of the default (`chpok`) set.
     static let defaultBackground: UInt32 = 0x000000
-    /// Current background; follows the selected palette set (spec 56).
+    /// Current background; follows the selected palette set (spec 56) and
+    /// the theme (spec 57) — black in the dark one, white in the light one.
     static var background: UIColor { UIColor(hex: PaletteStore.shared.background) }
     /// `background` for SwiftUI, matching the scene — see `display(_:)`.
     static var displayBackground: UIColor { display(PaletteStore.shared.background) }
@@ -42,13 +48,10 @@ enum Palette {
         PaletteStore.shared.displayColor(for: bubbleColor)
     }
 
-    /// The color SwiftUI should draw for `hex` to match the game scene.
-    /// The scene always gets the raw hex components and its layer decides
-    /// how to read them (`GameScene.applyColorSpace()`); SwiftUI is color
-    /// managed, so in P3 mode it has to be told the same numbers are P3.
+    /// The color SwiftUI should draw for `hex` to match the game scene: the
+    /// same numbers, read as Display P3.
     static func display(_ hex: UInt32) -> UIColor {
-        guard PaletteStore.shared.usesDisplayP3 else { return UIColor(hex: hex) }
-        return UIColor(
+        UIColor(
             displayP3Red: CGFloat((hex >> 16) & 0xFF) / 255,
             green: CGFloat((hex >> 8) & 0xFF) / 255,
             blue: CGFloat(hex & 0xFF) / 255,
@@ -82,7 +85,7 @@ extension UIColor {
     }
 
     /// Like `opaqueHexValue`, but with the color's Display P3 components —
-    /// what a slot stores while the P3 switch is on.
+    /// what a slot stores (see `Palette`).
     var opaqueDisplayP3HexValue: UInt32 {
         guard let space = CGColorSpace(name: CGColorSpace.displayP3),
               let converted = cgColor.converted(to: space, intent: .defaultIntent, options: nil),

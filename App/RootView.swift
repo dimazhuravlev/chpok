@@ -109,7 +109,6 @@ struct RootView: View {
         // scene repaints both.
         .onChange(of: paletteStore.colors) { _ in vm.scene?.repaintBubbles() }
         .onChange(of: paletteStore.background) { vm.scene?.repaintBubbles() }
-        .onChange(of: paletteStore.usesDisplayP3) { vm.scene?.applyColorSpace() }
         .onShake {
             guard vm.gameOver == nil else { return }
             showPaletteSheet = true

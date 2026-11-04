@@ -1,62 +1,64 @@
 import SwiftUI
 
 /// Test bottom sheet with every ready-made palette set (spec 56), opened by a
-/// long press on the score or the `-showPaletteSets` launch argument. Each
-/// row is a set's name and a tile in the set's own background with its six
-/// colors as circles, flush like on the board; tapping a row applies the set
-/// at once, so the board behind the sheet repaints live. At the medium detent
-/// the board stays undimmed and playable, so the colors can be judged as they
-/// really look. On top, a test switch that shows the game in Display P3
-/// (see `PaletteStore.usesDisplayP3`) to compare against sRGB.
+/// long press on the score or the `-showPaletteSets` launch argument. On top,
+/// pinned, the dark/light theme switch (spec 57); below it a scrolling list
+/// where each row is a set's name and a tile in the set's background with its
+/// six colors as circles, flush like on the board — both as the current theme
+/// shows them. Tapping a row applies the set at once, so the board behind the
+/// sheet repaints live. The sheet stays at half height with the list
+/// scrolling inside it, so the board stays undimmed and playable above it and
+/// the colors can be judged as they really look.
 struct PaletteSetsSheet: View {
     @ObservedObject private var store = PaletteStore.shared
 
     private static let circleSize: CGFloat = 28
 
+    private var isLight: Bool { store.appearance == .light }
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                p3Toggle
-                section("dark", sets: PaletteSet.all.filter { !$0.isLight })
-                section("light", sets: PaletteSet.all.filter { $0.isLight })
+        VStack(spacing: 0) {
+            Picker("theme", selection: appearance) {
+                Text(verbatim: "dark").tag(PaletteStore.Appearance.dark)
+                Text(verbatim: "light").tag(PaletteStore.Appearance.light)
             }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("appearancePicker")
             .padding(.horizontal, 16)
             .padding(.top, 24)
-            .padding(.bottom, 32)
+            .padding(.bottom, 8)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(PaletteSet.all) { set in
+                        row(set)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 32)
+            }
         }
         .accessibilityIdentifier("paletteSetsSheet")
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
         .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(isLight ? .light : .dark)
     }
 
-    private var p3Toggle: some View {
-        Toggle(isOn: Binding(
-            get: { store.usesDisplayP3 },
-            set: { value in
+    private var appearance: Binding<PaletteStore.Appearance> {
+        Binding(
+            get: { store.appearance },
+            set: { newValue in
                 Haptics.shared.selectionChanged()
-                store.setUsesDisplayP3(value)
+                store.setAppearance(newValue)
             }
-        )) {
-            Text(verbatim: "Display P3")
-                .font(.appSemiBold(16))
-                .foregroundStyle(.white)
-        }
-        .tint(.green)
-        .padding(.vertical, 4)
-        .accessibilityIdentifier("paletteSetsP3Toggle")
+        )
     }
 
-    @ViewBuilder
-    private func section(_ title: String, sets: [PaletteSet]) -> some View {
-        Text(verbatim: title)
-            .font(.appSemiBold(14))
-            .foregroundStyle(.white.opacity(0.5))
-            .padding(.top, 8)
-        ForEach(sets) { set in
-            row(set)
-        }
+    /// A color of the set as the current theme shows it.
+    private func shown(_ hex: UInt32) -> Color {
+        Color(uiColor: Palette.display(isLight ? LightTheme.color(for: hex) : hex))
     }
 
     private func row(_ set: PaletteSet) -> some View {
@@ -68,20 +70,26 @@ struct PaletteSetsSheet: View {
             HStack(spacing: 12) {
                 Text(verbatim: set.name)
                     .font(.appSemiBold(16))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 0) {
                     ForEach(set.colors.indices, id: \.self) { i in
                         Circle()
-                            .fill(Color(uiColor: Palette.display(set.colors[i])))
+                            .fill(shown(set.colors[i]))
                             .frame(width: Self.circleSize, height: Self.circleSize)
                     }
                 }
                 .padding(8)
-                .background(Color(uiColor: Palette.display(set.background)), in: RoundedRectangle(cornerRadius: 12))
+                .background(shown(set.background), in: RoundedRectangle(cornerRadius: 12))
+                // In the light theme the white tile sits on the sheet's own
+                // white; a hairline keeps its edge.
                 .overlay {
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? .white : .clear, lineWidth: 2)
+                        .strokeBorder(.black.opacity(isLight ? 0.1 : 0), lineWidth: 1)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isSelected ? Color.primary : .clear, lineWidth: 2)
                         .padding(-2)
                 }
             }

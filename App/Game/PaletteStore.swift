@@ -12,21 +12,29 @@ import BubbleShooterCore
 final class PaletteStore: ObservableObject {
     static let shared = PaletteStore()
 
-    /// Current palette, indexed by `BubbleColor.rawValue`. Always exactly
-    /// `BubbleColor.allCases.count` entries.
+    /// Dark or light theme (spec 57) — a separate switch, independent of the
+    /// palette: every palette is stored for the dark theme and the light one
+    /// is derived from it (`LightTheme`).
+    enum Appearance: String, Codable {
+        case dark, light
+    }
+
+    /// Current palette as shown, indexed by `BubbleColor.rawValue`: the
+    /// stored palette in the dark theme, its `LightTheme` counterpart in the
+    /// light one. Always exactly `BubbleColor.allCases.count` entries.
     @Published private(set) var colors: [UInt32]
-    /// Background the palette sits on (spec 56) — black for every dark set,
-    /// the set's own paper-like color for a light one.
+    /// Background as shown (spec 56): the set's own (black) in the dark
+    /// theme, its counterpart (white) in the light one.
     @Published private(set) var background: UInt32
     /// Id of the `PaletteSet` last applied; `nil` once a single color has
     /// been edited by hand.
     @Published private(set) var selectedSetId: String?
-    /// Test switch from the palette sets sheet: show the game in Display P3.
-    /// The stored hex values stay the same; they are just read as P3
-    /// coordinates instead of sRGB ones, so every saturated color gets
-    /// juicier while black, white and greys stay put (P3 shares sRGB's white
-    /// point and tone curve). See `GameScene.applyColorSpace()`.
-    @Published private(set) var usesDisplayP3: Bool
+    @Published private(set) var appearance: Appearance
+
+    /// The palette as stored — the dark-theme values `colors` and
+    /// `background` are derived from.
+    private var storedColors: [UInt32]
+    private var storedBackground: UInt32
 
     private let fileURL: URL
 
@@ -42,10 +50,41 @@ final class PaletteStore: ObservableObject {
     init(fileURL: URL = PaletteStore.defaultURL) {
         self.fileURL = fileURL
         let saved = Self.load(from: fileURL)
-        self.colors = saved?.colors ?? Palette.defaultBubbleColors
-        self.background = saved?.background ?? Palette.defaultBackground
-        self.selectedSetId = saved == nil ? PaletteSet.chpok.id : saved?.setId
-        self.usesDisplayP3 = saved?.usesDisplayP3 ?? false
+        var colors = saved?.colors ?? Palette.defaultBubbleColors
+        var background = saved?.background ?? Palette.defaultBackground
+        var setId = saved == nil ? PaletteSet.chpok.id : saved?.setId
+        // A selected set is re-read from `PaletteSet.all`, so edits to its
+        // values reach a device that already had it selected; a set that no
+        // longer exists falls back to the default one.
+        if let id = setId {
+            let set = PaletteSet.all.first { $0.id == id } ?? .chpok
+            colors = set.colors
+            background = set.background
+            setId = set.id
+        }
+        let appearance = saved?.appearance ?? .dark
+        self.storedColors = colors
+        self.storedBackground = background
+        self.selectedSetId = setId
+        self.appearance = appearance
+        self.colors = Self.shown(colors, in: appearance)
+        self.background = Self.shown([background], in: appearance)[0]
+    }
+
+    private static func shown(_ values: [UInt32], in appearance: Appearance) -> [UInt32] {
+        switch appearance {
+        case .dark: return values
+        case .light: return values.map(LightTheme.color(for:))
+        }
+    }
+
+    /// Recomputes what is shown from what is stored. Assigns only what
+    /// changed, so a repaint isn't triggered for nothing.
+    private func refresh() {
+        let newColors = Self.shown(storedColors, in: appearance)
+        let newBackground = Self.shown([storedBackground], in: appearance)[0]
+        if newColors != colors { colors = newColors }
+        if newBackground != background { background = newBackground }
     }
 
     /// Whether the background is light (relative luminance >= 0.5, as in the
@@ -60,7 +99,7 @@ final class PaletteStore: ObservableObject {
     }
 
     /// Raw slot color for the game scene: its components are the stored
-    /// hex values, whatever color space the scene's layer reads them in.
+    /// hex values, which the scene's P3-tagged layer reads as Display P3.
     func color(for bubbleColor: BubbleColor) -> UIColor {
         UIColor(hex: colors[bubbleColor.rawValue])
     }
@@ -76,33 +115,41 @@ final class PaletteStore: ObservableObject {
     /// anything" — dialing a color back to its original value by hand counts
     /// as default again. Drives the dimmed state of "reset colors" (owner
     /// feedback on spec 32): nothing to reset, nothing to draw attention to.
+    /// Independent of the theme: resetting doesn't touch it.
     var isDefault: Bool {
-        colors == Palette.defaultBubbleColors && background == Palette.defaultBackground
+        storedColors == Palette.defaultBubbleColors && storedBackground == Palette.defaultBackground
     }
 
     /// Sets the color for one slot from a (possibly translucent) system
     /// color-picker value, normalized to opaque before it's ever stored or
     /// shown (spec 32 "Решённые развилки").
     func setColor(_ color: UIColor, for bubbleColor: BubbleColor) {
-        // In P3 mode the hex holds P3 coordinates, so the picked color is
-        // stored in P3 too — otherwise it would come back more saturated.
-        colors[bubbleColor.rawValue] = usesDisplayP3 ? color.opaqueDisplayP3HexValue : color.opaqueHexValue
+        // Slots hold Display P3 coordinates (see `Palette`), so the picked
+        // color is stored in P3 too — otherwise it would come back more
+        // saturated than picked.
+        let picked = color.opaqueDisplayP3HexValue
+        // Slots hold dark-theme values; a color picked in the light theme is
+        // stored as the dark color whose light counterpart it is.
+        storedColors[bubbleColor.rawValue] = appearance == .light ? LightTheme.darkColor(for: picked) : picked
         selectedSetId = nil
+        refresh()
         persist()
     }
 
     /// Switches to a ready-made set: its colors and its background (spec 56).
     func apply(_ set: PaletteSet) {
-        colors = set.colors
-        background = set.background
+        storedColors = set.colors
+        storedBackground = set.background
         selectedSetId = set.id
+        refresh()
         persist()
     }
 
-    /// Flips the P3 test switch; the scene and the SwiftUI colors follow it.
-    func setUsesDisplayP3(_ value: Bool) {
-        guard value != usesDisplayP3 else { return }
-        usesDisplayP3 = value
+    /// Switches between the dark and the light theme (spec 57).
+    func setAppearance(_ newValue: Appearance) {
+        guard newValue != appearance else { return }
+        appearance = newValue
+        refresh()
         persist()
     }
 
@@ -112,16 +159,17 @@ final class PaletteStore: ObservableObject {
     }
 
     /// Reads and decodes the palette file: an object `{colors, background,
-    /// set, p3}`, or the older bare array of six hex strings (black
-    /// background). `nil` for "no file" *or* "file exists but is
-    /// corrupt/wrong shape" — in the latter case the bad file is deleted so
-    /// the next save starts clean (same contract as `GameSaveStore.load()`).
-    private static func load(from fileURL: URL) -> (colors: [UInt32], background: UInt32, setId: String?, usesDisplayP3: Bool)? {
+    /// set, appearance}`, or the older bare array of six hex strings (black
+    /// background, dark theme).
+    /// `nil` for "no file" *or* "file exists but is corrupt/wrong shape" — in
+    /// the latter case the bad file is deleted so the next save starts clean
+    /// (same contract as `GameSaveStore.load()`).
+    private static func load(from fileURL: URL) -> (colors: [UInt32], background: UInt32, setId: String?, appearance: Appearance)? {
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
         do {
             let file: FileFormat
             if let legacy = try? JSONDecoder().decode([String].self, from: data) {
-                file = FileFormat(colors: legacy, background: nil, set: nil, p3: nil)
+                file = FileFormat(colors: legacy, background: nil, set: nil, appearance: nil)
             } else {
                 file = try JSONDecoder().decode(FileFormat.self, from: data)
             }
@@ -142,7 +190,7 @@ final class PaletteStore: ObservableObject {
                 }
                 background = value
             }
-            return (values, background, file.set, file.p3 ?? false)
+            return (values, background, file.set, file.appearance ?? .dark)
         } catch {
             try? FileManager.default.removeItem(at: fileURL)
             return nil
@@ -153,22 +201,23 @@ final class PaletteStore: ObservableObject {
         var colors: [String]
         var background: String?
         var set: String?
-        var p3: Bool?
+        var appearance: Appearance?
     }
 
     /// Writes the palette atomically as `{"colors": [six "RRGGBB"],
-    /// "background": "RRGGBB", "set": id or null, "p3": bool}`. Never
-    /// throws — failures are logged and the previous file (if any) is left
-    /// in place, same contract as `GameSaveStore.save(_:)`.
+    /// "background": "RRGGBB", "set": id or null, "appearance": "dark" or
+    /// "light"}` — colors and background as stored, i.e. dark-theme values. Never throws — failures
+    /// are logged and the previous file (if any) is left in place, same
+    /// contract as `GameSaveStore.save(_:)`.
     private func persist() {
         do {
             let directory = fileURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let file = FileFormat(
-                colors: colors.map { String(format: "%06X", $0) },
-                background: String(format: "%06X", background),
+                colors: storedColors.map { String(format: "%06X", $0) },
+                background: String(format: "%06X", storedBackground),
                 set: selectedSetId,
-                p3: usesDisplayP3
+                appearance: appearance
             )
             let data = try JSONEncoder().encode(file)
             try data.write(to: fileURL, options: .atomic)

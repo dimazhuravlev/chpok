@@ -162,7 +162,13 @@ final class GameScene: SKScene {
     }
 
     override func didMove(to view: SKView) {
-        applyColorSpace()
+        // Palette hex values are Display P3 coordinates (see `Palette`).
+        // SpriteKit renders into an 8-bit sRGB Metal layer even on a P3
+        // screen and has no wide-color setting, so the layer is relabelled:
+        // the same 0...255 components are read as Display P3 by the
+        // compositor. Neutrals don't move; saturated colors reach the P3
+        // gamut edge.
+        (view.layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.displayP3)
 
         // Spec 45: draw the pre-blurred frames of the falling bubbles in the
         // background; nothing here waits for them.
@@ -718,17 +724,6 @@ final class GameScene: SKScene {
     /// must already have been reset by the caller before calling this).
     func rebuild() {
         performBoardReset()
-    }
-
-    /// P3 test switch (`PaletteStore.usesDisplayP3`). SpriteKit renders into
-    /// an 8-bit sRGB Metal layer even on a P3 screen and has no setting for
-    /// wide color, so the switch only relabels that layer: the same 0...255
-    /// components are read as Display P3 by the compositor. Neutrals don't
-    /// move; saturated colors reach out to the P3 gamut edge.
-    func applyColorSpace() {
-        guard let layer = view?.layer as? CAMetalLayer else { return }
-        let name = PaletteStore.shared.usesDisplayP3 ? CGColorSpace.displayP3 : CGColorSpace.sRGB
-        layer.colorspace = CGColorSpace(name: name)
     }
 
     /// Re-applies the current palette to every live bubble node — the
