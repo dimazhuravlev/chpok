@@ -51,7 +51,7 @@ Signing for distribution is picked automatically: `project.yml` sets `CODE_SIGN_
 ## Game rules and constants (from the original)
 
 - Board: **17 columns × 9 starting rows**, **6** bubble colors.
-- A shot fires on tap — matching the original's pointer-*down*-to-fire behavior (not pointer-up).
+- A shot fires when the finger lifts, toward the lift point — unlike the original, which fires on pointer-*down*.
 - A landing cluster of same-colored, ceiling-connected bubbles pops once it reaches **3+** bubbles.
 - Score per popped bubble: **`ceil(k/3)`**, where `k` is the bubble's 1-based position within the cluster (1, 1, 1, 2, 2, 2, 3, …).
 - Bubbles left disconnected from the ceiling after a pop ("hanging") are swept separately and score a flat **10** each.
@@ -64,9 +64,9 @@ The full derivation of these rules — every timer, coordinate formula and quirk
 
 - **Loss boundary is measured from the cannon**, not the original's hardcoded `boardCoordY > 14 && pixelY > 470` (a fixed offset from the top of its 800×600 canvas). The port derives the equivalent thresholds from the cannon's own Y position instead, so the loss line scales with the on-screen layout rather than being pixel-fixed — a conscious choice made for the full-screen portrait layout below.
 - **Layout**: portrait only; the board is stretched to fill the screen beneath the HUD header, instead of the original's fixed 800×600 desktop canvas.
-- **Tap = shoot**: chosen deliberately to mirror the original's pointer-down semantics 1:1, even though many touch games fire on release instead.
+- **Release = shoot**: the shot goes off when the finger lifts, toward the lift point, so a press can be slid to adjust the aim; the original fires on pointer-down. An optional aim line (the `trajectory` switch in the palette-sets sheet, opened by a long press on the score) shows the shot's exact path, wall bounces included, while the finger is down.
 - Board uses true hexagonal packing: row height is 32·√3/2 ≈ 27.71 instead of the original's 32, so all six neighbours of a cell are exactly one bubble diameter apart and the rows have no gaps between them.
-- Bubbles are drawn 30 px wide on a 32 px grid with no stroke, leaving an even 2 px gap; the app is rendered on a pure black background.
+- Bubbles are drawn 30 px wide on a 32 px grid with no stroke, leaving an even 2 px gap; the app is rendered on a pure black background (white in the light theme).
 - Rows alternate 17 and 16 bubbles so both board edges are straight; the parity reference flips with every dropped row, so the board keeps its silhouette and no longer shifts sideways.
 
 ## Not ported

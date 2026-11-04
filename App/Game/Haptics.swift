@@ -37,6 +37,12 @@ final class Haptics {
         pop.impactOccurred(intensity: 0.5)
     }
 
+    /// The flying bubble hits a side wall or lands — against bubbles or the
+    /// ceiling (spec 61): half as strong as a pop.
+    func bubbleHit() {
+        pop.impactOccurred(intensity: 0.25)
+    }
+
     func selectionChanged() {
         selection.selectionChanged()
     }

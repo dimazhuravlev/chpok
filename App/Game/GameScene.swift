@@ -124,6 +124,62 @@ final class GameScene: SKScene {
     /// CI blur never lands on the fade or on the first frames of play.
     private let bridgeWarmUpDelay: TimeInterval = GameViewModel.gameFadeInDuration + 0.4
 
+    // MARK: - Aim line (spec 60)
+
+    /// Where the finger is, in scene coordinates, while it is down; `nil`
+    /// otherwise.
+    private var aimPoint: CGPoint?
+    /// The predicted path of the shot (`GameEngine.predictedPath`), drawn
+    /// while the finger is down when the setting is on. Below the bubbles,
+    /// so it starts from under the ready bubble and ends under the one the
+    /// shot would land next to.
+    private lazy var trajectoryNode: SKShapeNode = {
+        let node = SKShapeNode()
+        node.zPosition = 5
+        node.fillColor = .clear
+        // White, so the default shading in `trajectoryShader` is just the
+        // stroke's antialiasing coverage.
+        node.strokeColor = .white
+        node.lineCap = .round
+        node.lineJoin = .round
+        node.isAntialiased = true
+        node.isHidden = true
+        node.strokeShader = trajectoryShader
+        return node
+    }()
+    /// Thickness of the aim line, points on screen.
+    private let trajectoryWidth: CGFloat = 1.5
+    /// White over the dark theme, black over the light one, at this opacity.
+    private let trajectoryOpacity: CGFloat = 0.12
+    /// Over this last stretch the line fades into the background, so it
+    /// doesn't end in a cut just short of the bubbles it would hit (scene
+    /// units; at most half the line).
+    private let trajectoryFade: CGFloat = GameConsts.bubbleSize * 3
+
+    /// Colors the stroke along its length: the line's color, mixed toward
+    /// the background over the last `u_fade` of the path (smoothstep), at
+    /// the default shading's antialiasing coverage. Both colors are opaque —
+    /// the line pre-blended over the flat background — so the corners at the
+    /// bounces, where the stroke overlaps itself, don't come out darker.
+    private lazy var trajectoryShader: SKShader = {
+        let shader = SKShader(source: """
+        void main() {
+            float coverage = SKDefaultShading().a;
+            float fade = min(u_fade, u_path_length * 0.5);
+            float t = clamp((u_path_length - v_path_distance) / max(fade, 0.0001), 0.0, 1.0);
+            t = t * t * (3.0 - 2.0 * t);
+            vec3 color = mix(u_background.rgb, u_line.rgb, t);
+            gl_FragColor = vec4(color * coverage, coverage);
+        }
+        """)
+        shader.uniforms = [
+            SKUniform(name: "u_fade", float: Float(trajectoryFade)),
+            SKUniform(name: "u_line", vectorFloat4: vector_float4(1, 1, 1, 1)),
+            SKUniform(name: "u_background", vectorFloat4: vector_float4(0, 0, 0, 1))
+        ]
+        return shader
+    }()
+
     // MARK: - Soft rubber (spec 47)
 
     /// Squash and stretch of the bubbles; stepped once per frame.
@@ -170,6 +226,8 @@ final class GameScene: SKScene {
         // gamut edge.
         (view.layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.displayP3)
 
+        if trajectoryNode.parent == nil { addChild(trajectoryNode) }
+
         // Spec 45: draw the pre-blurred frames of the falling bubbles in the
         // background; nothing here waits for them.
         FallBlurFrames.prepare()
@@ -193,7 +251,26 @@ final class GameScene: SKScene {
 
     // MARK: - Touches
 
+    /// The press primes the haptics and starts the aim line; the shot waits
+    /// for the lift.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        haptics.prepareForShot()
+        aimPoint = touches.first?.location(in: self)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        aimPoint = touches.first?.location(in: self)
+    }
+
+    /// A touch the system cancels (a gesture, an incoming call) doesn't fire.
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        aimPoint = nil
+    }
+
+    /// The shot goes off when the finger lifts, toward where it lifted
+    /// (spec 59) — a press can be slid to adjust the aim first.
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        aimPoint = nil
         guard let touch = touches.first else { return }
         let point = touch.location(in: self)
         let corePoint = geometry.corePoint(point)
@@ -254,6 +331,48 @@ final class GameScene: SKScene {
         handleEvents()
         sync()
         jelly.step(dt)
+        updateTrajectory()
+    }
+
+    /// Spec 60: redraws the aim line every frame while the finger is down —
+    /// the board moves under it (new rows, matches) even when the finger
+    /// doesn't. Hidden when the setting is off, nothing is ready to fire, or
+    /// the finger is outside the area a shot can be aimed from.
+    private func updateTrajectory() {
+        guard SettingsStore.shared.showsTrajectory,
+              let aimPoint,
+              let points = engine.predictedPath(toward: geometry.corePoint(aimPoint)),
+              let first = points.first
+        else {
+            trajectoryNode.isHidden = true
+            return
+        }
+        let path = CGMutablePath()
+        path.move(to: geometry.scenePoint(first))
+        for point in points.dropFirst() {
+            path.addLine(to: geometry.scenePoint(point))
+        }
+        trajectoryNode.path = path
+        updateTrajectoryColors()
+        trajectoryNode.lineWidth = trajectoryWidth * (view?.contentScaleFactor ?? 1) / pixelsPerUnit
+        trajectoryNode.isHidden = false
+    }
+
+    /// Feeds the shader the background and the line's color — white or
+    /// black at `trajectoryOpacity`, already blended over that background.
+    private func updateTrajectoryColors() {
+        let ink: CGFloat = PaletteStore.shared.isLight ? 0 : 1
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+        Palette.background.getRed(&r, green: &g, blue: &b, alpha: nil)
+        func mix(_ c: CGFloat) -> Float { Float(c + (ink - c) * trajectoryOpacity) }
+        let line = vector_float4(mix(r), mix(g), mix(b), 1)
+        let background = vector_float4(Float(r), Float(g), Float(b), 1)
+        if trajectoryShader.uniformNamed("u_line")?.vectorFloat4Value != line {
+            trajectoryShader.uniformNamed("u_line")?.vectorFloat4Value = line
+        }
+        if trajectoryShader.uniformNamed("u_background")?.vectorFloat4Value != background {
+            trajectoryShader.uniformNamed("u_background")?.vectorFloat4Value = background
+        }
     }
 
     /// Creates missing bubble nodes, updates position/color of existing
@@ -465,14 +584,15 @@ final class GameScene: SKScene {
         let velocity = sceneVelocity(of: bubble)
         if let previous = flightVelocities[bubble.id], previous.dx * velocity.dx < 0 {
             jelly.impulse(node, direction: CGVector(dx: 1, dy: 0), peak: BubbleJelly.wallSquash)
+            haptics.bubbleHit()
         }
         flightVelocities[bubble.id] = velocity
         jelly.setFlightTarget(node, direction: velocity)
     }
 
     /// Spec 47: the fired bubble hits — it squashes along its velocity and
-    /// springs back to round, and the bubbles around it take the blow: the
-    /// first ring right away, the second a little weaker and later. Those in
+    /// springs back to round, and the bubbles around it take the blow ring
+    /// by ring, each weaker and a little later (`BubbleJelly.rings`). Those in
     /// front of the blow squash more. Only resting board bubbles with a node
     /// of their own take part (not falling ones, not those in a merge layer).
     private func squashOnLanding(id: Int, removedPositions: [Int: Vec2]) {
@@ -483,14 +603,14 @@ final class GameScene: SKScene {
             jelly.clearTarget(node)
             jelly.impulse(node, direction: velocity, peak: BubbleJelly.landingSquash)
         }
+        haptics.bubbleHit()
         guard let corePosition = engine.bubbles.first(where: { $0.id == id })?.position ?? removedPositions[id] else { return }
         let center = geometry.scenePoint(corePosition)
         let speed = hypot(velocity.dx, velocity.dy)
         guard speed > 0 else { return }
         let forward = CGVector(dx: velocity.dx / speed, dy: velocity.dy / speed)
 
-        let firstRing = GameConsts.bubbleSize * BubbleJelly.firstRingRadius
-        let secondRing = GameConsts.bubbleSize * BubbleJelly.secondRingRadius
+        let reach = GameConsts.bubbleSize * (BubbleJelly.rings.last?.radius ?? 0)
         for other in engine.bubbles where other.id != id && other.state == .onBoard {
             guard !mergeIds.contains(other.id), !dying.contains(other.id),
                   let node = nodes[other.id] as? BubbleNode else { continue }
@@ -498,18 +618,13 @@ final class GameScene: SKScene {
             let dx = point.x - center.x
             let dy = point.y - center.y
             let distance = hypot(dx, dy)
-            guard distance > 0, distance < secondRing else { continue }
+            guard distance > 0, distance < reach,
+                  let ring = BubbleJelly.rings.first(where: { distance < GameConsts.bubbleSize * $0.radius })
+            else { continue }
             let toward = CGVector(dx: dx / distance, dy: dy / distance)
             let front = max(0, toward.dx * forward.dx + toward.dy * forward.dy)
-            let peak = BubbleJelly.neighbourSquash * (0.35 + 0.65 * front)
-            if distance < firstRing {
-                jelly.impulse(node, direction: toward, peak: peak)
-            } else {
-                jelly.impulse(
-                    node, direction: toward, peak: peak * BubbleJelly.secondRingFactor,
-                    delay: BubbleJelly.secondRingDelay
-                )
-            }
+            let peak = BubbleJelly.neighbourSquash * (0.35 + 0.65 * front) * ring.strength
+            jelly.impulse(node, direction: toward, peak: peak, delay: ring.delay)
         }
     }
 

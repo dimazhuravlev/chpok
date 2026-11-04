@@ -24,7 +24,7 @@ import Foundation
 final class BubbleJelly {
     // MARK: - Tuning (spec 47)
     //
-    // Strains are logarithmic: 0.12 is a 1.13 x 0.89 ellipse. Times in
+    // Strains are logarithmic: 0.15 is a 1.16 x 0.86 ellipse. Times in
     // seconds, frequency in hertz.
 
     /// How fast the rubber springs back, Hz. With the damping below, two or
@@ -33,27 +33,30 @@ final class BubbleJelly {
     /// 0 would ring forever, 1 would not wobble at all.
     static let dampingRatio: CGFloat = 0.32
     /// Stretch along the line of flight.
-    static let flightStretch: CGFloat = 0.12
+    static let flightStretch: CGFloat = 0.15
     /// Peak squash at the moment of the shot — the bubble is pushed, then the
     /// spring stretches it into `flightStretch`, overshooting a little.
-    static let launchSquash: CGFloat = 0.10
+    static let launchSquash: CGFloat = 0.12
     /// Peak squash against a side wall, across the wall.
-    static let wallSquash: CGFloat = 0.22
+    static let wallSquash: CGFloat = 0.27
     /// Peak squash of the fired bubble when it lands, along its velocity —
     /// the same against bubbles and against the ceiling.
-    static let landingSquash: CGFloat = 0.24
+    static let landingSquash: CGFloat = 0.30
     /// Peak squash of a neighbour of the landed bubble, along the line from
     /// the landed bubble to it; scaled by `0.35 + 0.65·max(0, u·v̂)`, so the
     /// ones in front of the blow take more.
-    static let neighbourSquash: CGFloat = 0.14
-    /// Neighbours closer than this (in bubble sizes) are the first ring...
-    static let firstRingRadius: Double = 1.2
-    /// ... and up to this the second.
-    static let secondRingRadius: Double = 2.2
-    /// The second ring reacts this much weaker...
-    static let secondRingFactor: CGFloat = 0.35
-    /// ... and this much later: the blow travels through the rubber.
-    static let secondRingDelay: TimeInterval = 0.04
+    static let neighbourSquash: CGFloat = 0.17
+    /// How the blow of a landing travels through the board, ring by ring:
+    /// a resting bubble closer than `radius` bubble sizes to the landed one
+    /// (and not reached by an earlier ring) squashes `strength` times as much
+    /// as the first ring, `delay` seconds later. On the hex grid the rings
+    /// are the direct neighbours (1), the next ring (1.73 and 2) and the one
+    /// after it (2.65 and 3).
+    static let rings: [(radius: Double, strength: CGFloat, delay: TimeInterval)] = [
+        (1.2, 1, 0),
+        (2.2, 0.5, 0.04),
+        (3.2, 0.22, 0.08)
+    ]
     /// Strain never drawn beyond this.
     static let maxStrain: CGFloat = 0.4
 

@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Test bottom sheet with every ready-made palette set (spec 56), opened by a
 /// long press on the score or the `-showPaletteSets` launch argument. On top,
-/// pinned, the dark/light theme switch (spec 57); below it a scrolling list
+/// pinned, the dark/light theme switch (spec 57) and the aim-line switch
+/// (spec 60); below them a scrolling list
 /// where each row is a set's name and a tile in the set's background with its
 /// six colors as circles, flush like on the board — both as the current theme
 /// shows them. Tapping a row applies the set at once, so the board behind the
@@ -11,6 +12,7 @@ import SwiftUI
 /// the colors can be judged as they really look.
 struct PaletteSetsSheet: View {
     @ObservedObject private var store = PaletteStore.shared
+    @ObservedObject private var settings = SettingsStore.shared
 
     private static let circleSize: CGFloat = 28
 
@@ -27,6 +29,15 @@ struct PaletteSetsSheet: View {
             .padding(.horizontal, 16)
             .padding(.top, 24)
             .padding(.bottom, 8)
+
+            Toggle(isOn: showsTrajectory) {
+                Text(verbatim: "trajectory")
+                    .font(.appSemiBold(16))
+                    .foregroundStyle(.primary)
+            }
+            .accessibilityIdentifier("trajectoryToggle")
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
@@ -53,6 +64,13 @@ struct PaletteSetsSheet: View {
                 Haptics.shared.selectionChanged()
                 store.setAppearance(newValue)
             }
+        )
+    }
+
+    private var showsTrajectory: Binding<Bool> {
+        Binding(
+            get: { settings.showsTrajectory },
+            set: { settings.setShowsTrajectory($0) }
         )
     }
 
