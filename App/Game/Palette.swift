@@ -31,9 +31,30 @@ enum Palette {
     static let defaultBackground: UInt32 = 0x000000
     /// Current background; follows the selected palette set (spec 56).
     static var background: UIColor { UIColor(hex: PaletteStore.shared.background) }
+    /// `background` for SwiftUI, matching the scene — see `display(_:)`.
+    static var displayBackground: UIColor { display(PaletteStore.shared.background) }
     static let text = UIColor(hex: 0xFFFFFF)
     static let overlayCard = UIColor(hex: 0x1C1C1E)
     static let overlayScrim = UIColor(white: 0, alpha: 0.6)
+
+    /// Current slot color for SwiftUI, matching the scene — see `display(_:)`.
+    static func displayColor(for bubbleColor: BubbleColor) -> UIColor {
+        PaletteStore.shared.displayColor(for: bubbleColor)
+    }
+
+    /// The color SwiftUI should draw for `hex` to match the game scene.
+    /// The scene always gets the raw hex components and its layer decides
+    /// how to read them (`GameScene.applyColorSpace()`); SwiftUI is color
+    /// managed, so in P3 mode it has to be told the same numbers are P3.
+    static func display(_ hex: UInt32) -> UIColor {
+        guard PaletteStore.shared.usesDisplayP3 else { return UIColor(hex: hex) }
+        return UIColor(
+            displayP3Red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
 }
 
 extension UIColor {
@@ -58,5 +79,18 @@ extension UIColor {
             UInt32(max(0, min(255, (value * 255).rounded())))
         }
         return (byte(components.red) << 16) | (byte(components.green) << 8) | byte(components.blue)
+    }
+
+    /// Like `opaqueHexValue`, but with the color's Display P3 components —
+    /// what a slot stores while the P3 switch is on.
+    var opaqueDisplayP3HexValue: UInt32 {
+        guard let space = CGColorSpace(name: CGColorSpace.displayP3),
+              let converted = cgColor.converted(to: space, intent: .defaultIntent, options: nil),
+              let components = converted.components, components.count >= 3
+        else { return opaqueHexValue }
+        func byte(_ value: CGFloat) -> UInt32 {
+            UInt32(max(0, min(255, (value * 255).rounded())))
+        }
+        return (byte(components[0]) << 16) | (byte(components[1]) << 8) | byte(components[2])
     }
 }

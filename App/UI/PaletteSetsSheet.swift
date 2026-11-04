@@ -6,7 +6,8 @@ import SwiftUI
 /// colors as circles, flush like on the board; tapping a row applies the set
 /// at once, so the board behind the sheet repaints live. At the medium detent
 /// the board stays undimmed and playable, so the colors can be judged as they
-/// really look.
+/// really look. On top, a test switch that shows the game in Display P3
+/// (see `PaletteStore.usesDisplayP3`) to compare against sRGB.
 struct PaletteSetsSheet: View {
     @ObservedObject private var store = PaletteStore.shared
 
@@ -15,6 +16,7 @@ struct PaletteSetsSheet: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
+                p3Toggle
                 section("dark", sets: PaletteSet.all.filter { !$0.isLight })
                 section("light", sets: PaletteSet.all.filter { $0.isLight })
             }
@@ -27,6 +29,23 @@ struct PaletteSetsSheet: View {
         .presentationDragIndicator(.visible)
         .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         .preferredColorScheme(.dark)
+    }
+
+    private var p3Toggle: some View {
+        Toggle(isOn: Binding(
+            get: { store.usesDisplayP3 },
+            set: { value in
+                Haptics.shared.selectionChanged()
+                store.setUsesDisplayP3(value)
+            }
+        )) {
+            Text(verbatim: "Display P3")
+                .font(.appSemiBold(16))
+                .foregroundStyle(.white)
+        }
+        .tint(.green)
+        .padding(.vertical, 4)
+        .accessibilityIdentifier("paletteSetsP3Toggle")
     }
 
     @ViewBuilder
@@ -54,12 +73,12 @@ struct PaletteSetsSheet: View {
                 HStack(spacing: 0) {
                     ForEach(set.colors.indices, id: \.self) { i in
                         Circle()
-                            .fill(Color(uiColor: UIColor(hex: set.colors[i])))
+                            .fill(Color(uiColor: Palette.display(set.colors[i])))
                             .frame(width: Self.circleSize, height: Self.circleSize)
                     }
                 }
                 .padding(8)
-                .background(Color(uiColor: UIColor(hex: set.background)), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(uiColor: Palette.display(set.background)), in: RoundedRectangle(cornerRadius: 12))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(isSelected ? .white : .clear, lineWidth: 2)

@@ -21,6 +21,12 @@ final class PaletteStore: ObservableObject {
     /// Id of the `PaletteSet` last applied; `nil` once a single color has
     /// been edited by hand.
     @Published private(set) var selectedSetId: String?
+    /// Test switch from the palette sets sheet: show the game in Display P3.
+    /// The stored hex values stay the same; they are just read as P3
+    /// coordinates instead of sRGB ones, so every saturated color gets
+    /// juicier while black, white and greys stay put (P3 shares sRGB's white
+    /// point and tone curve). See `GameScene.applyColorSpace()`.
+    @Published private(set) var usesDisplayP3: Bool
 
     private let fileURL: URL
 
@@ -39,6 +45,7 @@ final class PaletteStore: ObservableObject {
         self.colors = saved?.colors ?? Palette.defaultBubbleColors
         self.background = saved?.background ?? Palette.defaultBackground
         self.selectedSetId = saved == nil ? PaletteSet.chpok.id : saved?.setId
+        self.usesDisplayP3 = saved?.usesDisplayP3 ?? false
     }
 
     /// Whether the background is light (relative luminance >= 0.5, as in the
@@ -52,8 +59,16 @@ final class PaletteStore: ObservableObject {
         return luminance >= 0.5
     }
 
+    /// Raw slot color for the game scene: its components are the stored
+    /// hex values, whatever color space the scene's layer reads them in.
     func color(for bubbleColor: BubbleColor) -> UIColor {
         UIColor(hex: colors[bubbleColor.rawValue])
+    }
+
+    /// Slot color for SwiftUI, matching what the scene shows — see
+    /// `Palette.display(_:)`.
+    func displayColor(for bubbleColor: BubbleColor) -> UIColor {
+        Palette.display(colors[bubbleColor.rawValue])
     }
 
     /// Whether every slot currently matches `Palette.defaultBubbleColors`,
@@ -69,7 +84,9 @@ final class PaletteStore: ObservableObject {
     /// color-picker value, normalized to opaque before it's ever stored or
     /// shown (spec 32 "Решённые развилки").
     func setColor(_ color: UIColor, for bubbleColor: BubbleColor) {
-        colors[bubbleColor.rawValue] = color.opaqueHexValue
+        // In P3 mode the hex holds P3 coordinates, so the picked color is
+        // stored in P3 too — otherwise it would come back more saturated.
+        colors[bubbleColor.rawValue] = usesDisplayP3 ? color.opaqueDisplayP3HexValue : color.opaqueHexValue
         selectedSetId = nil
         persist()
     }
@@ -82,22 +99,29 @@ final class PaletteStore: ObservableObject {
         persist()
     }
 
+    /// Flips the P3 test switch; the scene and the SwiftUI colors follow it.
+    func setUsesDisplayP3(_ value: Bool) {
+        guard value != usesDisplayP3 else { return }
+        usesDisplayP3 = value
+        persist()
+    }
+
     /// Restores the `chpok` set — original six colors on black.
     func resetToDefaults() {
         apply(.chpok)
     }
 
     /// Reads and decodes the palette file: an object `{colors, background,
-    /// set}`, or the older bare array of six hex strings (black background).
-    /// `nil` for "no file" *or* "file exists but is corrupt/wrong shape" — in
-    /// the latter case the bad file is deleted so the next save starts clean
-    /// (same contract as `GameSaveStore.load()`).
-    private static func load(from fileURL: URL) -> (colors: [UInt32], background: UInt32, setId: String?)? {
+    /// set, p3}`, or the older bare array of six hex strings (black
+    /// background). `nil` for "no file" *or* "file exists but is
+    /// corrupt/wrong shape" — in the latter case the bad file is deleted so
+    /// the next save starts clean (same contract as `GameSaveStore.load()`).
+    private static func load(from fileURL: URL) -> (colors: [UInt32], background: UInt32, setId: String?, usesDisplayP3: Bool)? {
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
         do {
             let file: FileFormat
             if let legacy = try? JSONDecoder().decode([String].self, from: data) {
-                file = FileFormat(colors: legacy, background: nil, set: nil)
+                file = FileFormat(colors: legacy, background: nil, set: nil, p3: nil)
             } else {
                 file = try JSONDecoder().decode(FileFormat.self, from: data)
             }
@@ -118,7 +142,7 @@ final class PaletteStore: ObservableObject {
                 }
                 background = value
             }
-            return (values, background, file.set)
+            return (values, background, file.set, file.p3 ?? false)
         } catch {
             try? FileManager.default.removeItem(at: fileURL)
             return nil
@@ -129,12 +153,13 @@ final class PaletteStore: ObservableObject {
         var colors: [String]
         var background: String?
         var set: String?
+        var p3: Bool?
     }
 
     /// Writes the palette atomically as `{"colors": [six "RRGGBB"],
-    /// "background": "RRGGBB", "set": id or null}`. Never throws — failures
-    /// are logged and the previous file (if any) is left in place, same
-    /// contract as `GameSaveStore.save(_:)`.
+    /// "background": "RRGGBB", "set": id or null, "p3": bool}`. Never
+    /// throws — failures are logged and the previous file (if any) is left
+    /// in place, same contract as `GameSaveStore.save(_:)`.
     private func persist() {
         do {
             let directory = fileURL.deletingLastPathComponent()
@@ -142,7 +167,8 @@ final class PaletteStore: ObservableObject {
             let file = FileFormat(
                 colors: colors.map { String(format: "%06X", $0) },
                 background: String(format: "%06X", background),
-                set: selectedSetId
+                set: selectedSetId,
+                p3: usesDisplayP3
             )
             let data = try JSONEncoder().encode(file)
             try data.write(to: fileURL, options: .atomic)

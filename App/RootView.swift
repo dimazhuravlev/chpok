@@ -44,7 +44,7 @@ struct RootView: View {
                         if let scene = vm.scene {
                             SpriteView(scene: scene, options: [.ignoresSiblingOrder])
                         } else {
-                            Color(uiColor: Palette.background)
+                            Color(uiColor: Palette.displayBackground)
                         }
                         Rectangle()
                             .fill(.clear)
@@ -96,7 +96,7 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        .background(Color(uiColor: Palette.background).ignoresSafeArea())
+        .background(Color(uiColor: Palette.displayBackground).ignoresSafeArea())
         // Light color scheme = dark status-bar content. Game screen: dark
         // content on a light palette background, light on a dark one. The
         // game-over screen follows its text: black text wants dark content.
@@ -109,6 +109,7 @@ struct RootView: View {
         // scene repaints both.
         .onChange(of: paletteStore.colors) { _ in vm.scene?.repaintBubbles() }
         .onChange(of: paletteStore.background) { vm.scene?.repaintBubbles() }
+        .onChange(of: paletteStore.usesDisplayP3) { vm.scene?.applyColorSpace() }
         .onShake {
             guard vm.gameOver == nil else { return }
             showPaletteSheet = true

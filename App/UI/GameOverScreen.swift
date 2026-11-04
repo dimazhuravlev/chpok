@@ -71,7 +71,7 @@ struct GameOverScreen: View {
 
     var body: some View {
         ZStack {
-            Color(uiColor: Palette.color(for: Self.colors[colorIndex]))
+            Color(uiColor: Palette.displayColor(for: Self.colors[colorIndex]))
                 .ignoresSafeArea()
 
             VStack {

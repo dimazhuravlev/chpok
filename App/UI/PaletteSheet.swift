@@ -116,7 +116,7 @@ struct PaletteSheet: View {
 
     private func uiColorBinding(for bubbleColor: BubbleColor) -> Binding<UIColor> {
         Binding(
-            get: { store.color(for: bubbleColor) },
+            get: { store.displayColor(for: bubbleColor) },
             set: { store.setColor($0, for: bubbleColor) }
         )
     }
