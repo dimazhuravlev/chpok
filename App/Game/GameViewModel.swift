@@ -97,8 +97,9 @@ final class GameViewModel: ObservableObject {
     /// game-over screen is showing (set the instant it appears, with no
     /// animation — see `onGameOver` below), animated back to 1 by
     /// `dismissGameOver()` only after the game-over screen has fully faded
-    /// out. `restart()` never touches it, so it stays at 1 during normal
-    /// play.
+    /// out. `restart()` takes it 1 → 0 → 1 (spec 53): the screen goes to
+    /// black, the board is reset there, and the new match fades in. Otherwise
+    /// it stays at 1 during play.
     /// Starts at 0 so the very first appearance of the game — app launch —
     /// fades in over `gameFadeInDuration` exactly like the one after the
     /// game-over screen, rather than snapping in (owner request).
