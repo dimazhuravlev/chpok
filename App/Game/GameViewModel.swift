@@ -73,6 +73,11 @@ final class GameViewModel: ObservableObject {
     /// starts this only after `gameOverFadeDuration` has elapsed so the two
     /// screens never cross-fade over each other.
     static let gameFadeInDuration: Double = 0.8
+    /// Restart button (spec 53): the whole game screen fades to black over
+    /// this long, then the board is reset behind the black.
+    static let restartFadeOutDuration: Double = 0.3
+    /// ...and the fresh game appears out of the black over this long.
+    static let restartFadeInDuration: Double = 0.5
     /// Extra lift (points) applied to both the cannon and queue-bubble
     /// positions in `prepare(containerSize:)` (spec 31): the queue bubble
     /// used to be clipped by the bottom edge, so both move up by this same
@@ -98,6 +103,14 @@ final class GameViewModel: ObservableObject {
     /// fades in over `gameFadeInDuration` exactly like the one after the
     /// game-over screen, rather than snapping in (owner request).
     @Published var gameOpacity: Double = 0
+    /// True for the whole restart transition (fade out + fade in, spec 53):
+    /// `RootView` blocks input on the game container meanwhile, and
+    /// `restart()` ignores repeated taps.
+    @Published var isRestarting = false
+    /// Mirrors `scene.isPaused` into `SpriteView`'s own `isPaused` parameter,
+    /// so the view can't un-pause the scene behind the model's back while the
+    /// restart fade-out is running (spec 53).
+    @Published var isScenePaused = false
     /// Exact format `bubbles:<N> score:<S> lives:<L>`, N = `engine.boardBubbles.count`.
     @Published var status: String = "bubbles:0 score:0 lives:5"
 
@@ -271,18 +284,36 @@ final class GameViewModel: ObservableObject {
         status = "bubbles:\(engine.boardBubbles.count) score:\(engine.score) lives:\(engine.livesLeft)"
     }
 
-    /// Restart button: reset the engine's board, dismiss any game-over
-    /// popup, and rebuild the scene's visuals to match. Only reachable
-    /// during active play — the header sits behind the game-over screen
-    /// once it's showing — so there's no game-over screen to fade out here,
-    /// and `gameOpacity` is simply left at 1 (spec 31).
+    /// Restart button (spec 53): the whole game screen fades to black over
+    /// `restartFadeOutDuration`, the board is reset behind the black, and the
+    /// new game fades in over `restartFadeInDuration`. The scene is paused for
+    /// the fade-out so a bubble in flight can't land (or end the match) in the
+    /// middle of the transition, and input is off until the fade-in is done.
+    /// Only reachable during active play — the header sits behind the
+    /// game-over screen once it's showing — but `gameOver = nil` stays in the
+    /// reset, as before.
     func restart() {
-        guard let engine, let scene else { return }
-        engine.resetBoard()
-        withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
-            gameOver = nil
+        guard let engine, let scene, !isRestarting else { return }
+        isRestarting = true
+        scene.isPaused = true
+        isScenePaused = true
+        withAnimation(.easeInOut(duration: Self.restartFadeOutDuration), completionCriteria: .logicallyComplete) {
+            gameOpacity = 0
+        } completion: { [weak self] in
+            guard let self else { return }
+            engine.resetBoard()
+            withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
+                self.gameOver = nil
+            }
+            scene.rebuild()
+            scene.isPaused = false
+            isScenePaused = false
+            withAnimation(.easeInOut(duration: Self.restartFadeInDuration), completionCriteria: .logicallyComplete) {
+                self.gameOpacity = 1
+            } completion: { [weak self] in
+                self?.isRestarting = false
+            }
         }
-        scene.rebuild()
     }
 
     /// OK button on the game-over popup. Unlike `restart()`, this sequences

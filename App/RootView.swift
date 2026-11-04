@@ -26,7 +26,7 @@ struct RootView: View {
                 GeometryReader { geo in
                     ZStack {
                         if let scene = vm.scene {
-                            SpriteView(scene: scene, options: [.ignoresSiblingOrder])
+                            SpriteView(scene: scene, isPaused: vm.isScenePaused, options: [.ignoresSiblingOrder])
                         } else {
                             Color(Palette.background)
                         }
@@ -58,6 +58,8 @@ struct RootView: View {
             // by `dismissGameOver()` only after that screen has fully faded
             // out, so the two screens never show through each other.
             .opacity(vm.gameOpacity)
+            // No input during the restart fade out and in (spec 53).
+            .allowsHitTesting(!vm.isRestarting)
 
             if showGameOverDemo {
                 GameOverScreen(
