@@ -15,6 +15,8 @@ struct HUDView: View {
                 Text(verbatim: String(score))
                     .font(.pretendardSemiBold(32))
                     .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(score)))
+                    .animation(.snappy, value: score)
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("scoreLabel")
                 Spacer()
