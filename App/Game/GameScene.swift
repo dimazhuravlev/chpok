@@ -82,6 +82,16 @@ final class GameScene: SKScene {
     /// CI blur never lands on the fade or on the first frames of play.
     private let bridgeWarmUpDelay: TimeInterval = GameViewModel.gameFadeInDuration + 0.4
 
+    // MARK: - Soft rubber (spec 47)
+
+    /// Squash and stretch of the bubbles; stepped once per frame.
+    private let jelly = BubbleJelly()
+    /// Latest flight velocity of the launched bubble, in scene coordinates,
+    /// keyed by `Bubble.id`: a sign change of `dx` between frames is a wall
+    /// bounce (the core reports none), and the landing squashes along the
+    /// last value (the engine may already have dropped the bubble by then).
+    private var flightVelocities: [Int: CGVector] = [:]
+
     var onScoreChanged: ((Int) -> Void)?
     var onGameOver: ((Bool, Int, Int, Int) -> Void)?
     var onTurnResolved: (() -> Void)?
@@ -168,6 +178,7 @@ final class GameScene: SKScene {
         // for this deviation.
         handleEvents()
         sync()
+        jelly.step(dt)
     }
 
     /// Creates missing bubble nodes, updates position/color of existing
@@ -235,6 +246,9 @@ final class GameScene: SKScene {
             node.alpha = 1
             targets.removeValue(forKey: bubble.id)
             node.position = scenePos
+            if let node = node as? BubbleNode {
+                updateFlightStretch(node: node, bubble: bubble)
+            }
             return
         }
 
@@ -315,8 +329,11 @@ final class GameScene: SKScene {
         for event in events {
             haptics.handle(event)
             switch event {
+            case let .launched(id, _):
+                startFlightStretch(id: id)
             case let .landed(id, _, _):
                 lastLandedId = id
+                squashOnLanding(id: id, removedPositions: removedPositions)
             case let .clusterMatched(ids, color):
                 startBridgeMerge(ids: ids, color: color, removedPositions: removedPositions)
             case let .removed(id, _, _, _, reason):
@@ -342,6 +359,75 @@ final class GameScene: SKScene {
                 isAddingRowThisFrame = true
             default:
                 break
+            }
+        }
+    }
+
+    /// Velocity of a bubble in scene coordinates (the core's Y axis points
+    /// down, the scene's up).
+    private func sceneVelocity(of bubble: Bubble) -> CGVector {
+        CGVector(dx: bubble.velocity.x, dy: -bubble.velocity.y)
+    }
+
+    /// Spec 47: the shot leaves the cannon — squashed by the push, then
+    /// stretched along its line of flight.
+    private func startFlightStretch(id: Int) {
+        guard let node = nodes[id] as? BubbleNode,
+              let bubble = engine.bubbles.first(where: { $0.id == id }) else { return }
+        let velocity = sceneVelocity(of: bubble)
+        flightVelocities[id] = velocity
+        jelly.launch(node, direction: velocity)
+    }
+
+    /// Spec 47, every frame of the flight: keeps the stretch along the
+    /// current velocity, and answers a wall bounce — `dx` changing sign
+    /// since the last frame — with a squash across the wall.
+    private func updateFlightStretch(node: BubbleNode, bubble: Bubble) {
+        let velocity = sceneVelocity(of: bubble)
+        if let previous = flightVelocities[bubble.id], previous.dx * velocity.dx < 0 {
+            jelly.impulse(node, direction: CGVector(dx: 1, dy: 0), peak: BubbleJelly.wallSquash)
+        }
+        flightVelocities[bubble.id] = velocity
+        jelly.setFlightTarget(node, direction: velocity)
+    }
+
+    /// Spec 47: the fired bubble hits — it squashes along its velocity and
+    /// springs back to round, and the bubbles around it take the blow: the
+    /// first ring right away, the second a little weaker and later. Those in
+    /// front of the blow squash more. Only resting board bubbles with a node
+    /// of their own take part (not falling ones, not those in a merge layer).
+    private func squashOnLanding(id: Int, removedPositions: [Int: Vec2]) {
+        guard let velocity = flightVelocities.removeValue(forKey: id) else { return }
+        if let node = nodes[id] as? BubbleNode {
+            jelly.clearTarget(node)
+            jelly.impulse(node, direction: velocity, peak: BubbleJelly.landingSquash)
+        }
+        guard let corePosition = engine.bubbles.first(where: { $0.id == id })?.position ?? removedPositions[id] else { return }
+        let center = geometry.scenePoint(corePosition)
+        let speed = hypot(velocity.dx, velocity.dy)
+        guard speed > 0 else { return }
+        let forward = CGVector(dx: velocity.dx / speed, dy: velocity.dy / speed)
+
+        let firstRing = GameConsts.bubbleSize * BubbleJelly.firstRingRadius
+        let secondRing = GameConsts.bubbleSize * BubbleJelly.secondRingRadius
+        for other in engine.bubbles where other.id != id && other.state == .onBoard {
+            guard !mergeIds.contains(other.id), !dying.contains(other.id),
+                  let node = nodes[other.id] as? BubbleNode else { continue }
+            let point = geometry.scenePoint(other.position)
+            let dx = point.x - center.x
+            let dy = point.y - center.y
+            let distance = hypot(dx, dy)
+            guard distance > 0, distance < secondRing else { continue }
+            let toward = CGVector(dx: dx / distance, dy: dy / distance)
+            let front = max(0, toward.dx * forward.dx + toward.dy * forward.dy)
+            let peak = BubbleJelly.neighbourSquash * (0.35 + 0.65 * front)
+            if distance < firstRing {
+                jelly.impulse(node, direction: toward, peak: peak)
+            } else {
+                jelly.impulse(
+                    node, direction: toward, peak: peak * BubbleJelly.secondRingFactor,
+                    delay: BubbleJelly.secondRingDelay
+                )
             }
         }
     }
@@ -467,6 +553,8 @@ final class GameScene: SKScene {
         mergeLayers.removeAll()
         mergeIds.removeAll()
         lastLandedId = nil
+        jelly.reset()
+        flightVelocities.removeAll()
         nodes.removeAll()
         dying.removeAll()
         targets.removeAll()

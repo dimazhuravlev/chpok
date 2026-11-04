@@ -144,6 +144,38 @@ final class BubbleNode: SKSpriteNode {
         super.init(coder: aDecoder)
     }
 
+    /// Uniform scale the bubble is drawn at before any deformation. 1 on the
+    /// scene; a bridge merge layer draws its figure at `pixelsPerUnit` times
+    /// the size (spec 38) and sets this instead of `setScale`, so a squash
+    /// that began on the scene carries on inside the layer (spec 47).
+    var baseScale: CGFloat = 1 {
+        didSet { applyTransform() }
+    }
+    private var deformationAngle: CGFloat = 0
+    private var deformationStretch: CGFloat = 0
+
+    /// Spec 47: stretches the bubble by `exp(stretch)` along `angle` and
+    /// squeezes it by `exp(-stretch)` across, so its area stays the same. A
+    /// negative `stretch` squashes it along `angle`. Rest is `(0, 0)`.
+    func setDeformation(angle: CGFloat, stretch: CGFloat) {
+        deformationAngle = angle
+        deformationStretch = stretch
+        applyTransform()
+    }
+
+    /// The one place the node's transform is written. SpriteKit composes a
+    /// node's transform as `R(θ)·S`, and the ring is a child with `R(-θ)`, so
+    /// the ring ends up with `R(θ)·S·R(-θ)`: the same stretch along `θ`, but
+    /// the ring's diagonal light gradient does not turn with the bubble. The
+    /// fill is a radially symmetric circle, so for it `R(θ)·S` looks the same
+    /// as a plain stretch along `θ`.
+    private func applyTransform() {
+        zRotation = deformationAngle
+        xScale = baseScale * exp(deformationStretch)
+        yScale = baseScale * exp(-deformationStretch)
+        borderNode?.zRotation = -deformationAngle
+    }
+
     func apply(color: BubbleColor) {
         self.color = Palette.color(for: color)
     }

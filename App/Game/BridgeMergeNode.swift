@@ -342,7 +342,7 @@ final class BridgeMergeNode: SKEffectNode {
             // duration: the figure is drawn in one flat color.
             bubble.removeFromParent()
             bubble.position = CGPoint(x: bubble.position.x * unit, y: bubble.position.y * unit)
-            bubble.setScale(unit)
+            bubble.baseScale = unit
             bubble.zPosition = Self.circleZPosition
             bubble.setBorderHidden(true)
             addChild(bubble)
