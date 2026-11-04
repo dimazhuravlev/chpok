@@ -21,6 +21,9 @@ struct RootView: View {
     /// sheet has no business appearing over the game-over screen, which has
     /// its own dedicated full-screen presentation and transition.
     @State private var showPaletteSheet = false
+    /// Hidden test sheet with ready-made palette sets (spec 56): long press
+    /// on the score, or launch with `-showPaletteSets`.
+    @State private var showPaletteSets = CommandLine.arguments.contains("-showPaletteSets")
 
     var body: some View {
         ZStack {
@@ -30,6 +33,10 @@ struct RootView: View {
                         livesLeft: vm.livesLeft,
                         maxLives: vm.maxLives,
                         onRestart: vm.restart,
+                        onScoreLongPress: {
+                            guard !isShowingGameOver, !vm.isRestarting else { return }
+                            showPaletteSets = true
+                        },
                         foreground: paletteStore.isLight ? .black : .white
                     )
                 GeometryReader { geo in
@@ -108,6 +115,9 @@ struct RootView: View {
         }
         .sheet(isPresented: $showPaletteSheet) {
             PaletteSheet()
+        }
+        .sheet(isPresented: $showPaletteSets) {
+            PaletteSetsSheet()
         }
     }
 

@@ -8,6 +8,8 @@ struct HUDView: View {
     let livesLeft: Int
     let maxLives: Int
     let onRestart: () -> Void
+    /// Hidden test gesture (spec 56): long press on the score.
+    var onScoreLongPress: () -> Void = {}
     /// Black on a light palette background, white on a dark one.
     var foreground: Color = .white
 
@@ -21,6 +23,7 @@ struct HUDView: View {
                     .animation(.snappy, value: score)
                     .foregroundStyle(foreground)
                     .accessibilityIdentifier("scoreLabel")
+                    .onLongPressGesture(minimumDuration: 0.5, perform: onScoreLongPress)
                 Spacer()
                 Button("restart") {
                     Haptics.shared.buttonTapped()
