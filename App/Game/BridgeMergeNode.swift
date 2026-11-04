@@ -87,9 +87,10 @@ enum BridgeShape {
 /// (spec 38, replacing the blur-based gooey merge of spec 37).
 ///
 /// During the growth the bubbles do not move and do not change size. Between
-/// every pair of neighbouring bubbles a bridge grows, one after another in a
-/// wave that starts at the bubble that was just fired and spreads through the
-/// cluster; when the last bridge is complete, the whole figure pops (below).
+/// every pair of neighbouring bubbles a bridge grows, in bursts: several at
+/// once, in random places kept apart from each other, the first one where the
+/// fired bubble hit; the number per burst grows with the size of the cluster,
+/// so a big one does not drag on (spec 50). When the last bridge is complete, the whole figure pops (below).
 ///
 /// Bridges are sprites, not shapes: `SKShapeNode` is drawn almost without
 /// antialiasing in our scaled scene, a texture drawn by Core Graphics (with
@@ -163,9 +164,13 @@ final class BridgeMergeNode: SKEffectNode {
     static let handleSize: CGFloat = 2.4
     /// How long one bridge takes to grow, eased in and out.
     static let bridgeGrowDuration: TimeInterval = 0.30
-    /// Delay between the starts of two consecutive bridges. Constant: a big
-    /// cluster simply has a long wave.
+    /// Delay between two bursts of bridges (spec 50). With `E` bridges there
+    /// are `S = ceil(√E)` bursts of `k = ceil(E / S)` each, so the wave grows
+    /// as √E, not as E.
     static let edgeStagger: TimeInterval = 0.09
+    /// Bridges of one burst start `0...burstJitter` apart at random, so the
+    /// burst reads as simultaneous but its haptics do not collapse into one frame.
+    static let burstJitter: TimeInterval = 0.03
     /// Pause between the last bridge completing and the dissolve starting.
     static let holdAfterBridges: TimeInterval = 0.1
     /// How long the dissolve takes. Short on purpose: the section bursts
@@ -317,7 +322,7 @@ final class BridgeMergeNode: SKEffectNode {
 
     /// Takes over `bubbles` — the nodes of one matched cluster, all of one
     /// color, at their final scene positions — re-parenting them into the
-    /// effect. The bridge wave starts at `bubbles[startIndex]`. `pixelsPerUnit`
+    /// effect. The first bridge touches `bubbles[startIndex]`. `pixelsPerUnit`
     /// is the density the scene is shown at (device pixels per logical unit).
     init(bubbles: [BubbleNode], startIndex: Int, color: UIColor, pixelsPerUnit: CGFloat) {
         self.bubbles = bubbles
@@ -327,11 +332,11 @@ final class BridgeMergeNode: SKEffectNode {
         green = CGFloat((hex >> 8) & 0xFF) / 255
         blue = CGFloat(hex & 0xFF) / 255
 
-        let edges = Self.waveOrderedEdges(
-            positions: bubbles.map(\.position),
-            startIndex: startIndex
-        )
-        bridgesDoneAt = edges.isEmpty ? 0 : Double(edges.count - 1) * Self.edgeStagger + Self.bridgeGrowDuration
+        let positions = bubbles.map(\.position)
+        let edges = Self.neighbourEdges(positions: positions)
+        var generator = SystemRandomNumberGenerator()
+        let starts = Self.burstStarts(edges: edges, positions: positions, startIndex: startIndex, using: &generator)
+        bridgesDoneAt = (starts.max() ?? 0) + (edges.isEmpty ? 0 : Self.bridgeGrowDuration)
         // Scene coordinates, before the bubbles move into pixel space below.
         if bubbles.isEmpty {
             center = .zero
@@ -398,7 +403,7 @@ final class BridgeMergeNode: SKEffectNode {
             sprite.zPosition = Self.bridgeZPosition
             sprite.isHidden = true
             addChild(sprite)
-            bridges.append(Bridge(sprite: sprite, start: Double(order) * Self.edgeStagger, shownFrame: -1))
+            bridges.append(Bridge(sprite: sprite, start: starts[order], shownFrame: -1))
         }
     }
 
@@ -406,62 +411,100 @@ final class BridgeMergeNode: SKEffectNode {
         fatalError("init(coder:) has not been implemented")
     }
 
-    // MARK: - Wave
+    // MARK: - Schedule
 
     private struct Edge {
         let a: Int
         let b: Int
     }
 
-    /// Every neighbouring pair of the cluster, in the order the wave reaches
-    /// it: breadth-first from `startIndex`; a pair gets its number the first
-    /// time the traversal reaches either of its ends (so the pairs around the
-    /// start bubble go first, then the pairs around its neighbours, ...).
-    /// Clusters are connected by the game's own rules; a part that somehow
-    /// is not gets a second traversal of its own so no pair is left out.
-    private static func waveOrderedEdges(positions: [CGPoint], startIndex: Int) -> [Edge] {
+    /// Every neighbouring pair of the cluster: no pair is left out, whatever
+    /// the shape of the cluster.
+    private static func neighbourEdges(positions: [CGPoint]) -> [Edge] {
         let count = positions.count
         guard count > 1 else { return [] }
         let limit = CGFloat(GameConsts.bubbleSize) * neighbourDistanceFactor
-
-        var neighbours = [[Int]](repeating: [], count: count)
+        var edges: [Edge] = []
         for i in 0..<count {
             for j in (i + 1)..<count where hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) < limit {
-                neighbours[i].append(j)
-                neighbours[j].append(i)
+                edges.append(Edge(a: i, b: j))
             }
         }
+        return edges
+    }
 
-        var visited = [Bool](repeating: false, count: count)
-        var numbered = Set<Int>() // a * count + b with a < b
-        var ordered: [Edge] = []
-        var queue: [Int] = []
+    /// Start time of every bridge (parallel to `edges`), in seconds before
+    /// `timeScale`. The `E` bridges go in `S = ceil(√E)` steps `edgeStagger`
+    /// apart, `k = ceil(E / S)` per step (the last step takes what is left).
+    /// The first step opens with one random bridge touching `startIndex`, at 0;
+    /// the rest of the batch is chosen from the shuffled remainder to be spread
+    /// out, in three passes until the batch is full: no shared bubble and no
+    /// bubble next to a chosen one; only no shared bubble; anything. Inside a
+    /// batch every start but the very first is pushed by `0...burstJitter`.
+    private static func burstStarts(
+        edges: [Edge], positions: [CGPoint], startIndex: Int, using generator: inout some RandomNumberGenerator
+    ) -> [TimeInterval] {
+        let total = edges.count
+        guard total > 0 else { return [] }
 
-        func traverse(from root: Int) {
-            visited[root] = true
-            queue.append(root)
-            var head = queue.count - 1
-            while head < queue.count {
-                let node = queue[head]
-                head += 1
-                for other in neighbours[node] {
-                    let key = min(node, other) * count + max(node, other)
-                    if numbered.insert(key).inserted {
-                        ordered.append(Edge(a: node, b: other))
-                    }
-                    if !visited[other] {
-                        visited[other] = true
-                        queue.append(other)
-                    }
+        var neighbours = [Set<Int>](repeating: [], count: positions.count)
+        for edge in neighbourEdges(positions: positions) {
+            neighbours[edge.a].insert(edge.b)
+            neighbours[edge.b].insert(edge.a)
+        }
+
+        let steps = Int(ceil(Double(total).squareRoot()))
+        let batchSize = Int(ceil(Double(total) / Double(steps)))
+        let first = min(max(0, startIndex), max(0, positions.count - 1))
+
+        var remaining = Array(edges.indices).shuffled(using: &generator)
+        var starts = [TimeInterval](repeating: 0, count: total)
+        var step = 0
+        while !remaining.isEmpty {
+            var batch: [Int] = []
+            if step == 0 {
+                let touching = remaining.firstIndex { edges[$0].a == first || edges[$0].b == first } ?? 0
+                batch.append(remaining.remove(at: touching))
+            }
+            var chosen = Set<Int>() // bubbles of the batch
+            var blocked = Set<Int>() // ... and their neighbours
+            func take(_ edge: Int) {
+                for bubble in [edges[edge].a, edges[edge].b] {
+                    chosen.insert(bubble)
+                    blocked.insert(bubble)
+                    blocked.formUnion(neighbours[bubble])
                 }
             }
-        }
+            for edge in batch { take(edge) }
 
-        traverse(from: min(max(0, startIndex), count - 1))
-        for index in 0..<count where !visited[index] {
-            traverse(from: index)
+            for pass in 0..<3 where batch.count < batchSize {
+                var left: [Int] = []
+                for edge in remaining {
+                    let ends = [edges[edge].a, edges[edge].b]
+                    let fits: Bool
+                    switch pass {
+                    case 0: fits = !ends.contains { blocked.contains($0) }
+                    case 1: fits = !ends.contains { chosen.contains($0) }
+                    default: fits = true
+                    }
+                    if batch.count < batchSize, fits {
+                        batch.append(edge)
+                        take(edge)
+                    } else {
+                        left.append(edge)
+                    }
+                }
+                remaining = left
+            }
+
+            for (place, edge) in batch.enumerated() {
+                let isFirst = step == 0 && place == 0
+                let jitter = isFirst ? 0 : TimeInterval.random(in: 0...burstJitter, using: &generator)
+                starts[edge] = Double(step) * edgeStagger + jitter
+            }
+            step += 1
         }
-        return ordered
+        return starts
     }
 
     // MARK: - Warm-up
