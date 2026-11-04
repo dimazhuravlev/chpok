@@ -38,6 +38,13 @@ final class GameScene: SKScene {
     /// How far the fill lightens toward white at the flash's peak.
     private let flashLightenFraction: CGFloat = 0.35
 
+    // MARK: - Pop blur tuning (spec 52)
+
+    /// Blur radius reached by the end of a pop's collapse, logical units: a
+    /// bubble's own radius is about 15, so 8 is a light blur, not a cloud
+    /// like the fall's. Drawn with the pre-blurred `FallBlurFrames`.
+    private let popBlurRadius: CGFloat = 8
+
     private let engine: GameEngine
     private let geometry: SceneGeometry
     private let haptics = Haptics.shared
@@ -383,8 +390,8 @@ final class GameScene: SKScene {
                 // and pop one by one on their own `.removed` events.
                 guard Self.matchEffect == .bridges else { break }
                 startBridgeMerge(ids: ids, color: color, removedPositions: removedPositions)
-            case let .removed(id, _, _, _, reason):
-                animateRemoval(id: id, reason: reason)
+            case let .removed(id, _, position, _, reason):
+                animateRemoval(id: id, reason: reason, position: position)
             case let .scoreChanged(score):
                 onScoreChanged?(score)
             case let .gameOver(won, score, bonus, elapsedMs):
@@ -549,7 +556,7 @@ final class GameScene: SKScene {
     }
 
     /// Removal animation of one bubble. A matched bubble pops (spec 51) — a
-    /// flash, then a collapse — in the default `.pops` mode; with `.bridges`
+    /// flash, then a collapse with a light blur — in the default `.pops` mode; with `.bridges`
     /// (spec 38) a match has no animation of its own here: a bubble that went
     /// into a bridge merge layer is animated by that layer, so its `.removed`
     /// only checks it off, which is also what lets `sync()` trust
@@ -557,7 +564,7 @@ final class GameScene: SKScene {
     /// that mode — in practice there is none, the engine announces the whole
     /// cluster before its first removal — is dropped by `sync()`, as its id is
     /// gone from `engine.bubbles`.) A hanging bubble falls in both modes.
-    private func animateRemoval(id: Int, reason: RemovalReason) {
+    private func animateRemoval(id: Int, reason: RemovalReason, position: Vec2) {
         if mergeIds.remove(id) != nil { return }
         if reason == .match && Self.matchEffect == .bridges { return }
 
@@ -579,6 +586,12 @@ final class GameScene: SKScene {
         }
 
         if reason == .match, let bubble = node as? BubbleNode {
+            // Spec 52: the engine removes the first matched bubble (usually
+            // the shot) in the same frame as `.landed`, before `sync()` has
+            // moved its node from the last flight frame, so pop it at the
+            // cell the event names, fully opaque.
+            bubble.position = geometry.scenePoint(position)
+            bubble.alpha = 1
             haptics.bubblePopped()
             bubble.run(popAction(for: bubble, cleanup: cleanup))
             return
@@ -636,7 +649,13 @@ final class GameScene: SKScene {
             let t = popFadeDuration > 0 ? min(1, max(0, CGFloat(elapsed) / CGFloat(popFadeDuration))) : 1
             bubble.baseScale = peak * (1 - t)
         }
-        let shrinkAndFade = SKAction.group([collapse, SKAction.fadeOut(withDuration: popFadeDuration)])
+        var collapseActions = [collapse, SKAction.fadeOut(withDuration: popFadeDuration)]
+        // Spec 52: a light blur grows as the bubble collapses. Nil — a sharp
+        // pop — if the pre-blurred frames are not ready yet.
+        if let blur = FallBlurFrames.blurAction(duration: popFadeDuration, toRadius: popBlurRadius, delay: 0) {
+            collapseActions.append(blur)
+        }
+        let shrinkAndFade = SKAction.group(collapseActions)
         return SKAction.sequence([flash, shrinkAndFade, cleanup])
     }
 

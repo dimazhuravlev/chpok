@@ -6,9 +6,10 @@ import BubbleShooterCore
 /// (HUD, game-over screen) drive the same generators. `prepareForShot()`
 /// primes the pop generator right before a shot, when a pop is likely within
 /// the next ~0.5-1s, and again when a cluster matches (the bridge wave is
-/// long). A match is voiced by its bridges, one pop each (spec 43): the merge
-/// effect calls `bubblePopped()` as every bridge appears, so `handle(_:)`
-/// only voices bubbles that fall off as hanging. New events get a haptic by
+/// long). A match is voiced by the scene (spec 43, 51): in the default
+/// `.pops` mode `GameScene.animateRemoval` calls `bubblePopped()` on every
+/// bubble's pop, in `.bridges` the merge effect does as every bridge appears,
+/// so `handle(_:)` only voices bubbles that fall off as hanging. New events get a haptic by
 /// adding one line to `handle(_:)`.
 @MainActor
 final class Haptics {
@@ -37,9 +38,10 @@ final class Haptics {
         button.impactOccurred(intensity: 1.0)
     }
 
-    /// A match is voiced by the bridges of its merge effect, not by the
-    /// per-bubble `.removed` events, so only hanging bubbles pop here; the
-    /// match itself just primes the generator for the long bridge wave.
+    /// A match is voiced elsewhere — `GameScene.animateRemoval` in `.pops`
+    /// (one haptic per pop), the bridges of the merge effect in `.bridges` —
+    /// so `.match` removals stay silent here and only hanging bubbles pop;
+    /// the match itself just primes the generator for the long wave.
     func handle(_ event: GameEvent) {
         switch event {
         case .clusterMatched:

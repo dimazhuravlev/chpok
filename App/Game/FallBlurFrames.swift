@@ -146,22 +146,27 @@ enum FallBlurFrames {
 
     // MARK: - Fall
 
-    /// The action that blurs a falling bubble over `duration` seconds: after
-    /// `blurDelay` of it the radius follows `BridgeMergeNode`'s ease-out up to
-    /// `maxBlurRadius` over the remaining time, and
+    /// The action that blurs a bubble over `duration` seconds: after the
+    /// `delay` share of it the radius follows `BridgeMergeNode`'s ease-out up
+    /// to `toRadius` (clamped to `maxBlurRadius`) over the remaining time, and
     /// every time the nearest frame changes, the bubble's texture and size
     /// are swapped for it. The ring goes with the first blurred frame — a
-    /// cloud has no outline. Run it alongside the fall and the fade. Nil when
-    /// the ladder is not ready: the bubble falls sharp.
-    static func blurAction(duration: TimeInterval) -> SKAction? {
+    /// cloud has no outline. The fall runs it with `maxBlurRadius` and
+    /// `blurDelay`, the pop (spec 52) with a light radius and no delay. Run it
+    /// alongside the motion and the fade. Nil when the ladder is not ready:
+    /// the bubble goes sharp.
+    static func blurAction(
+        duration: TimeInterval, toRadius: CGFloat = maxBlurRadius, delay: CGFloat = blurDelay
+    ) -> SKAction? {
         guard isReady else { return nil }
 
+        let target = min(toRadius, maxBlurRadius)
         var shown = 0
         return SKAction.customAction(withDuration: duration) { node, elapsed in
             guard let bubble = node as? BubbleNode else { return }
             let progress = duration > 0 ? CGFloat(elapsed) / CGFloat(duration) : 1
-            let blurProgress = (progress - blurDelay) / (1 - blurDelay)
-            let radius = maxBlurRadius * BridgeMergeNode.easeOut(blurProgress)
+            let blurProgress = (progress - delay) / (1 - delay)
+            let radius = target * BridgeMergeNode.easeOut(blurProgress)
             let index = frameIndex(forRadius: radius)
             guard index != shown, let frame = frame(at: index) else { return }
             shown = index
