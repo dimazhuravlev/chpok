@@ -206,10 +206,13 @@ final class GameScene: SKScene {
         return node
     }()
     /// Thickness of the aim line, points on screen.
-    private let trajectoryWidth: CGFloat = 1.5
-    /// White over a dark background, black over a light one (`PaletteStore.isLight`),
-    /// at this opacity.
-    private let trajectoryOpacity: CGFloat = 0.12
+    private let trajectoryWidth: CGFloat = 1
+    /// How far before and after a bounce the line starts and ends its turn,
+    /// points on screen (spec 93): a small round instead of a sharp corner.
+    /// Set by length along the line, not by radius: a fixed radius at the
+    /// sharp corner of a flat shot started the turn far short of the wall,
+    /// and the zigzag looked narrower than the board.
+    private let trajectoryCornerCut: CGFloat = 4
     /// Over this last stretch the line fades into the background, so it
     /// doesn't end in a cut just short of the bubbles it would hit (scene
     /// units; at most half the line).
@@ -418,36 +421,66 @@ final class GameScene: SKScene {
         guard let aimPoint,
               let points = engine.predictedPath(toward: geometry.corePoint(aimPoint)),
               Self.bouncesOffWall(points),
-              let first = points.first
+              let first = points.first,
+              let ready = engine.readyBubble
         else {
             trajectoryNode.isHidden = true
             return
         }
+        let unitsPerPoint = (view?.contentScaleFactor ?? 1) / pixelsPerUnit
+        let scenePoints = points.map { geometry.scenePoint($0) }
         let path = CGMutablePath()
         path.move(to: geometry.scenePoint(first))
-        for point in points.dropFirst() {
-            path.addLine(to: geometry.scenePoint(point))
+        for i in scenePoints.indices.dropFirst().dropLast() {
+            let corner = scenePoints[i]
+            let radius = Self.cornerRadius(
+                from: scenePoints[i - 1], at: corner, to: scenePoints[i + 1],
+                cut: trajectoryCornerCut * unitsPerPoint
+            )
+            if radius > 0 {
+                path.addArc(tangent1End: corner, tangent2End: scenePoints[i + 1], radius: radius)
+            } else {
+                path.addLine(to: corner)
+            }
         }
+        if let last = scenePoints.last, scenePoints.count > 1 { path.addLine(to: last) }
         trajectoryNode.path = path
-        updateTrajectoryColors()
-        trajectoryNode.lineWidth = trajectoryWidth * (view?.contentScaleFactor ?? 1) / pixelsPerUnit
+        updateTrajectoryColors(for: ready)
+        trajectoryNode.lineWidth = trajectoryWidth * unitsPerPoint
         trajectoryNode.isHidden = false
     }
 
-    /// Whether a `predictedPath` meets a wall: every bounce puts its two
-    /// points exactly on one.
+    /// The radius that rounds the corner at `corner` starting `cut` before it
+    /// on each segment (or at the segment's half, if shorter). 0 for no
+    /// round — a corner that turns right back on itself.
+    private static func cornerRadius(from previous: CGPoint, at corner: CGPoint, to next: CGPoint,
+                                     cut: CGFloat) -> CGFloat {
+        let a = CGVector(dx: previous.x - corner.x, dy: previous.y - corner.y)
+        let b = CGVector(dx: next.x - corner.x, dy: next.y - corner.y)
+        let la = hypot(a.dx, a.dy), lb = hypot(b.dx, b.dy)
+        guard la > 0, lb > 0 else { return 0 }
+        let cosine = max(-1, min(1, (a.dx * b.dx + a.dy * b.dy) / (la * lb)))
+        let halfAngle = acos(cosine) / 2
+        guard halfAngle > 0.01 else { return 0 }
+        // The round meets each segment r / tan(half angle) from the corner.
+        return min(cut, min(la, lb) / 2) * tan(halfAngle)
+    }
+
+    /// Whether a `predictedPath` meets a wall: every bounce puts its point
+    /// exactly on one.
     private static func bouncesOffWall(_ points: [Vec2]) -> Bool {
         points.contains { $0.x == GameConsts.leftBoardBorder || $0.x == GameConsts.rightBoardBorder }
     }
 
-    /// Feeds the shader the background and the line's color — white or
-    /// black at `trajectoryOpacity`, already blended over that background.
-    private func updateTrajectoryColors() {
-        let ink: CGFloat = PaletteStore.shared.isLight ? 0 : 1
+    /// Feeds the shader the background and the line's color: the color of
+    /// the bubble in the cannon, the one about to fly it, fully opaque
+    /// (spec 91; a faint white or black before).
+    private func updateTrajectoryColors(for ready: Bubble) {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
         Palette.background.getRed(&r, green: &g, blue: &b, alpha: nil)
-        func mix(_ c: CGFloat) -> Float { Float(c + (ink - c) * trajectoryOpacity) }
-        let line = vector_float4(mix(r), mix(g), mix(b), 1)
+        var lr: CGFloat = 0, lg: CGFloat = 0, lb: CGFloat = 0
+        Palette.color(for: ready.color).getRed(&lr, green: &lg, blue: &lb, alpha: nil)
+        let line = vector_float4(Float(lr), Float(lg), Float(lb), 1)
         let background = vector_float4(Float(r), Float(g), Float(b), 1)
         if trajectoryShader.uniformNamed("u_line")?.vectorFloat4Value != line {
             trajectoryShader.uniformNamed("u_line")?.vectorFloat4Value = line

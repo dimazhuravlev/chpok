@@ -82,8 +82,10 @@ public enum GameConsts {
     /// of the step, so shots stuck ~15% earlier than aimed. Must stay above
     /// `launchPower` (the flight sub-step) or shots tunnel through targets.
     public static let collisionDistance: Double = 21
-    /// Clamp range for the aiming/launch angle, degrees.
-    public static let maxAngleDegrees: Double = 75
+    /// Clamp range for the aiming/launch angle, degrees from straight up.
+    /// 82 (spec 94; the original's 75) lets a shot go out nearly flat, 8°
+    /// above the horizontal.
+    public static let maxAngleDegrees: Double = 82
     /// Per-bubble removal stagger, ms (`70 * i` in `removeSameColorCluster`
     /// and `markHangingClusters`).
     public static let removalStaggerMs = 70

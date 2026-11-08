@@ -176,10 +176,11 @@ public final class GameEngine {
         let dx = pivot.x - point.x
         let dy = pivot.y - point.y
         var angle = 180.0 / Double.pi * atan2(dy, dx) - 90.0
-        if angle < -180 || angle > 75 {
-            angle = 75
-        } else if angle < -75 {
-            angle = -75
+        let limit = GameConsts.maxAngleDegrees
+        if angle < -180 || angle > limit {
+            angle = limit
+        } else if angle < -limit {
+            angle = -limit
         }
         return angle
     }
@@ -202,9 +203,9 @@ public final class GameEngine {
     }
 
     /// The path a shot fired toward `point` would take right now, without
-    /// firing it (spec 60): the ready bubble's position, every wall bounce
-    /// (two points each, see below), and where the bubble would arrive — the point it stops at before
-    /// snapping into its cell. Takes the very steps of `performLaunch`,
+    /// firing it (spec 60): the ready bubble's position, every point where
+    /// it meets a wall, and where the bubble would arrive — the point it
+    /// stops at before snapping into its cell. Takes the very steps of `performLaunch`,
     /// `updateLaunchedBubble` and `checkIfArrivedToPosition` on a scratch
     /// position, quirks included, so the line can't disagree with the shot.
     /// `nil` when there is no ready bubble or `point` is outside the input
@@ -226,16 +227,14 @@ public final class GameEngine {
         for _ in 0..<GameEngine.maxPredictedSteps {
             position.x += velocity.x
             position.y += velocity.y
-            // A bounce clamps the overshoot back onto the wall, x only, so
-            // the flight meets the wall at one point and goes on from a
-            // point a little further along it: both go in the path.
+            // A bounce folds the overshoot back at the wall (spec 92): the
+            // flight goes on from the point where it met the wall.
             for border in [GameConsts.rightBoardBorder, GameConsts.leftBoardBorder]
             where border == GameConsts.rightBoardBorder ? position.x > border : position.x < border {
                 let t = (border - (position.x - velocity.x)) / velocity.x
                 path.append(Vec2(x: border, y: position.y - velocity.y + t * velocity.y))
                 velocity.x *= -1
-                position.x = border
-                path.append(position)
+                position.x = 2 * border - position.x
             }
 
             // `checkIfArrivedToPosition`: a trial step, then per bubble in

@@ -87,6 +87,9 @@ final class GameViewModel: ObservableObject {
     /// amount, keeping the `queueGap` between their centers untouched. One
     /// constant to tweak the whole block.
     static let cannonBlockLift: Double = 72
+    /// How far above the cannon (logical units) the aiming area ends: a
+    /// press below that, on or near the cannon, fires nothing (spec 94).
+    static let aimAreaBottomGap: Double = 24
     /// Distance (points) from the cannon-bubble center down to the
     /// queue-bubble center. 96 in the Figma layout (spec 20), pushed 28pt
     /// lower by owner request.
@@ -190,7 +193,9 @@ final class GameViewModel: ObservableObject {
         let cannonY = canvasHeight - (103 + Self.cannonBlockLift) / scale
         let queueY = cannonY + Self.queueGap / scale
         let cannonPivotX = GameConsts.boardMinX + GameConsts.boardLogicalWidth / 2
-        let inputAreaMaxY = cannonY - 64
+        // Aiming reaches down to just above the cannon (spec 94; 64 before),
+        // so a nearly flat shot doesn't need the finger far out to a side.
+        let inputAreaMaxY = cannonY - Self.aimAreaBottomGap
         let layout = GameLayout(
             canvasHeight: canvasHeight,
             cannonY: cannonY,

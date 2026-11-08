@@ -65,11 +65,25 @@ final class PredictedPathTests: XCTestCase {
             // Shallow to the left (the input area ends 47 above the cannon):
             // hits the left wall before the board.
             let path = assertFlightFollowsPath(engine, toward: Vec2(x: pivot.x - 200, y: pivot.y - 70))
-            guard path.count >= 4 else { return XCTFail("expected a bounce, got \(path)") }
-            // Where the flight meets the wall, and where the clamp puts it.
+            guard path.count >= 3 else { return XCTFail("expected a bounce, got \(path)") }
+            // Where the flight meets the wall; it leaves from that very point.
             XCTAssertEqual(path[1].x, GameConsts.leftBoardBorder, accuracy: 1e-9)
-            XCTAssertEqual(path[2].x, GameConsts.leftBoardBorder, accuracy: 1e-9)
-            XCTAssertLessThanOrEqual(path[2].y, path[1].y)
+            XCTAssertGreaterThan(path[2].x, GameConsts.leftBoardBorder)
+            assertMirrored(path)
+        }
+    }
+
+    /// Spec 92: at every bounce the flight leaves the wall from the point it
+    /// met it, at the mirrored angle — no jog along the wall in between.
+    private func assertMirrored(_ path: [Vec2], file: StaticString = #filePath, line: UInt = #line) {
+        for i in 1..<max(1, path.count - 1) {
+            let bounce = path[i]
+            guard bounce.x == GameConsts.leftBoardBorder || bounce.x == GameConsts.rightBoardBorder else { continue }
+            let inX = bounce.x - path[i - 1].x, inY = bounce.y - path[i - 1].y
+            let outX = path[i + 1].x - bounce.x, outY = path[i + 1].y - bounce.y
+            XCTAssertLessThan(inX * outX, 0, "x must turn back at the wall", file: file, line: line)
+            // Same slope magnitude both ways: dy/|dx| in equals dy/|dx| out.
+            XCTAssertEqual(inY / abs(inX), outY / abs(outX), accuracy: 1e-9, file: file, line: line)
         }
     }
 
@@ -83,7 +97,7 @@ final class PredictedPathTests: XCTestCase {
         XCTAssertTrue(path.dropFirst().dropLast(2).allSatisfy {
             $0.x == GameConsts.rightBoardBorder || $0.x == GameConsts.leftBoardBorder
         })
-        XCTAssertEqual(path.count % 2, 1, "two points per bounce")
+        assertMirrored(Array(path.dropLast()))
         XCTAssertEqual(path.last?.y ?? 0, GameConsts.ceilingSnapY, accuracy: 1e-9)
     }
 

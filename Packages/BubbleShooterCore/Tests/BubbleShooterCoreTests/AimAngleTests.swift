@@ -2,10 +2,11 @@ import XCTest
 @testable import BubbleShooterCore
 
 /// `GameEngine.aimAngle(from:to:)` tests (game-logic.md §4: shared formula
-/// used by both aiming and firing, including the `angle < -180 -> +75`
-/// copy-paste quirk, §17.3).
+/// used by both aiming and firing, including the `angle < -180 -> +limit`
+/// copy-paste quirk, §17.3). The limit is `GameConsts.maxAngleDegrees`.
 final class AimAngleTests: XCTestCase {
     let pivot = Vec2(x: 296, y: 552)
+    let limit = GameConsts.maxAngleDegrees
 
     func assertAngle(_ point: Vec2, _ expected: Double, accuracy: Double = 0.01, file: StaticString = #filePath, line: UInt = #line) {
         let angle = GameEngine.aimAngle(from: pivot, to: point)
@@ -24,23 +25,23 @@ final class AimAngleTests: XCTestCase {
         assertAngle(Vec2(x: 196, y: 452), -45)
     }
 
-    func testHorizontalRightClampsTo75() {
-        assertAngle(Vec2(x: 500, y: 552), 75)
+    func testHorizontalRightClampsToLimit() {
+        assertAngle(Vec2(x: 500, y: 552), limit)
     }
 
-    func testHorizontalLeftClampsToMinus75() {
-        assertAngle(Vec2(x: 100, y: 552), -75)
+    func testHorizontalLeftClampsToMinusLimit() {
+        assertAngle(Vec2(x: 100, y: 552), -limit)
     }
 
     /// Quirk (§4, §17.3): a point below-right of the pivot yields a raw
     /// angle < -180 before clamping, which the original's copy-paste bug
-    /// clamps to +75 (not -75, as would be intuitive).
-    func testDownRightClampsTo75Quirk() {
-        assertAngle(Vec2(x: 396, y: 652), 75)
+    /// clamps to +limit (not -limit, as would be intuitive).
+    func testDownRightClampsToLimitQuirk() {
+        assertAngle(Vec2(x: 396, y: 652), limit)
     }
 
-    func testDownLeftClampsToMinus75() {
-        assertAngle(Vec2(x: 196, y: 652), -75)
+    func testDownLeftClampsToMinusLimit() {
+        assertAngle(Vec2(x: 196, y: 652), -limit)
     }
 
     /// `fire(angleDegrees:)` clamps its input to `±maxAngleDegrees` via a
@@ -51,7 +52,7 @@ final class AimAngleTests: XCTestCase {
     /// the well-specified per-shot angle (`GameEvent.launched`'s
     /// `angleDegrees`, set from the same clamped value passed into
     /// `performLaunch`).
-    func testFireAngleDegreesClampsTo75() {
+    func testFireAngleDegreesClampsToLimit() {
         let engine = GameEngine(random: SeededGameRandom(seed: 42))
         engine.advance(ms: 600) // clear the post-init cannon lockout (§2/§15)
 
@@ -65,6 +66,6 @@ final class AimAngleTests: XCTestCase {
             XCTFail("expected a .launched event")
             return
         }
-        XCTAssertEqual(angleDegrees, 75)
+        XCTAssertEqual(angleDegrees, limit)
     }
 }

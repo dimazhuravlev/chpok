@@ -172,18 +172,18 @@ final class FlightTests: XCTestCase {
         XCTAssertEqual(landed?.boardY, landedY)
     }
 
-    // (b) empty board, angle 75: bounces off the right wall (x clamps to
-    // 561, vx flips sign), eventually lands in row 0 within the board's
-    // horizontal bounds.
+    // (b) empty board, angle 75: bounces off the right wall (the overshoot
+    // folds back inside it, vx flips sign — spec 92), eventually lands in
+    // row 0 within the board's horizontal bounds.
     //
     // Bounce detection can no longer assume a tick is exactly one sub-step
     // (spec 18: a tick may run 1 or 2 full `launchPower` sub-steps). A
     // single-step lookahead prediction computed once before `tick()` would
     // miss a bounce that happens on the *second* sub-step of a 2-step tick.
     // Instead this watches `velocity.x`'s sign across the whole tick: the
-    // bounce clamp is the only place that flips it, so a positive-to-negative
+    // bounce is the only place that flips it, so a positive-to-negative
     // flip unambiguously means a bounce happened inside that tick, however
-    // many sub-steps it ran — and the clamp guarantees position never ends
+    // many sub-steps it ran — and the fold guarantees position never ends
     // the tick past the border, even if a second sub-step then moved it back
     // away from the wall.
     func testAngledShotBouncesOffRightWall() {

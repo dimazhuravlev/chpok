@@ -144,12 +144,18 @@ extension GameEngine {
         bubble.position.x += bubble.velocity.x
         bubble.position.y += bubble.velocity.y
 
+        // A step that crosses a wall is folded back at it (spec 92): the
+        // overshoot is mirrored, so the flight goes on from the very point
+        // it met the wall at the mirrored angle. The original clamped x onto
+        // the wall and kept the overshoot in y, which slid the bubble up to
+        // half a bubble along the wall before it came back — a visible jog
+        // between the incoming and the outgoing line.
         if bubble.position.x > GameConsts.rightBoardBorder {
             bubble.velocity.x *= -1
-            bubble.position.x = GameConsts.rightBoardBorder
+            bubble.position.x = 2 * GameConsts.rightBoardBorder - bubble.position.x
         } else if bubble.position.x < GameConsts.leftBoardBorder {
             bubble.velocity.x *= -1
-            bubble.position.x = GameConsts.leftBoardBorder
+            bubble.position.x = 2 * GameConsts.leftBoardBorder - bubble.position.x
         }
 
         if checkIfArrivedToPosition(bubble) {
