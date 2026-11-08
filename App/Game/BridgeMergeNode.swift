@@ -373,13 +373,13 @@ final class BridgeMergeNode: SKEffectNode {
                 width: bubble.frame.width * unit, height: bubble.frame.height * unit
             ))
             // The layer sits at the origin, so scene positions carry over
-            // once converted to its pixel space. The ring goes for the
+            // once converted to its pixel space. The glass goes for the
             // duration: the figure is drawn in one flat color.
             bubble.removeFromParent()
             bubble.position = CGPoint(x: bubble.position.x * unit, y: bubble.position.y * unit)
             bubble.baseScale = unit
             bubble.zPosition = Self.circleZPosition
-            bubble.setBorderHidden(true)
+            bubble.setGlassHidden(true)
             addChild(bubble)
         }
 

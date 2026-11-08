@@ -25,6 +25,16 @@ final class Haptics {
     /// Gentle tick for picking a row in the palette-sets test sheet (spec 56).
     private let selection = UISelectionFeedbackGenerator()
 
+    /// The board going out and coming in (spec 70): a series of faint ticks,
+    /// one per bubble but never closer together than `seriesInterval`, so
+    /// the row-by-row wave reads as a light, even texture rather than a
+    /// buzz. The same soft tick both ways: as each bubble lets go in a
+    /// restart's collapse, and as each lands in a pour.
+    private let series = UIImpactFeedbackGenerator(style: .soft)
+    private static let seriesInterval: TimeInterval = 0.045
+    private static let seriesIntensity: CGFloat = 0.7
+    private var lastSeriesTick: TimeInterval = 0
+
     func prepareForShot() {
         pop.prepare()
     }
@@ -43,8 +53,56 @@ final class Haptics {
         pop.impactOccurred(intensity: 0.25)
     }
 
+    /// Primes the series generator: a collapse or a pour is about to start.
+    func prepareForBoardChange() {
+        series.prepare()
+    }
+
+    /// A bubble starts falling in a restart's collapse.
+    func boardBubbleLetGo() {
+        seriesTick()
+    }
+
+    /// A poured bubble lands in its cell.
+    func boardBubbleSettled() {
+        seriesTick()
+    }
+
+    private func seriesTick() {
+        let now = CACurrentMediaTime()
+        guard now - lastSeriesTick >= Self.seriesInterval else { return }
+        lastSeriesTick = now
+        series.impactOccurred(intensity: Self.seriesIntensity)
+    }
+
     func selectionChanged() {
         selection.selectionChanged()
+    }
+
+    // MARK: - Background slider (spec 73)
+
+    /// A soft bump as the finger takes the slider and, fainter, as it lets
+    /// go of a stretched one; a firmer knock when the value reaches either
+    /// end. The steps in between tick with `selection`.
+    private let sliderSoft = UIImpactFeedbackGenerator(style: .soft)
+    private let sliderEnd = UIImpactFeedbackGenerator(style: .rigid)
+
+    func sliderGrabbed() {
+        sliderSoft.impactOccurred(intensity: 0.7)
+        selection.prepare()
+        sliderEnd.prepare()
+    }
+
+    func sliderTicked() {
+        selection.selectionChanged()
+    }
+
+    func sliderReachedEnd() {
+        sliderEnd.impactOccurred(intensity: 0.8)
+    }
+
+    func sliderSprangBack() {
+        sliderSoft.impactOccurred(intensity: 0.45)
     }
 
     func buttonTapped() {

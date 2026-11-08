@@ -150,11 +150,11 @@ enum FallBlurFrames {
     /// `delay` share of it the radius follows `BridgeMergeNode`'s ease-out up
     /// to `toRadius` (clamped to `maxBlurRadius`) over the remaining time, and
     /// every time the nearest frame changes, the bubble's texture and size
-    /// are swapped for it. The ring goes with the first blurred frame — a
-    /// cloud has no outline. The fall runs it with `maxBlurRadius` and
-    /// `blurDelay`, the pop (spec 52) with a light radius and no delay. Run it
-    /// alongside the motion and the fade. Nil when the ladder is not ready:
-    /// the bubble goes sharp.
+    /// are swapped for it. The bubble's glass fades out over the first
+    /// frames (`BubbleNode.fadeGlass`) — a cloud has no rim. The fall runs it
+    /// with `maxBlurRadius` and `blurDelay`, the pop (spec 52) with a light
+    /// radius and no delay. Run it alongside the motion and the fade. Nil
+    /// when the ladder is not ready: the bubble goes sharp.
     static func blurAction(
         duration: TimeInterval, toRadius: CGFloat = maxBlurRadius, delay: CGFloat = blurDelay
     ) -> SKAction? {
@@ -172,7 +172,7 @@ enum FallBlurFrames {
             shown = index
             bubble.texture = frame.texture
             bubble.size = frame.size
-            bubble.setBorderHidden(true)
+            bubble.fadeGlass(forBlurRadius: blurRadius(ofFrame: index))
         }
     }
 }

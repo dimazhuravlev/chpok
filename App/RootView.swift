@@ -21,28 +21,40 @@ struct RootView: View {
     /// sheet has no business appearing over the game-over screen, which has
     /// its own dedicated full-screen presentation and transition.
     @State private var showPaletteSheet = false
-    /// Hidden test sheet with ready-made palette sets (spec 56): long press
-    /// on the score, or launch with `-showPaletteSets`.
+    /// Sheet with ready-made palette sets (spec 56): the `settings` button
+    /// (spec 71), or launch with `-showPaletteSets`.
     @State private var showPaletteSets = CommandLine.arguments.contains("-showPaletteSets")
+    /// Between the board and the screen edges. The scene is drawn over it too
+    /// (spec 72); only the board sits inside it.
+    private static let boardSideMargin: CGFloat = 10
+    /// Header text and dots: black on a light palette background, white on a
+    /// dark one.
+    private var foreground: Color { paletteStore.isLight ? .black : .white }
 
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
                 HUDView(
-                        score: vm.score,
                         livesLeft: vm.livesLeft,
                         maxLives: vm.maxLives,
-                        onRestart: vm.restart,
-                        onScoreLongPress: {
-                            guard !isShowingGameOver, !vm.isRestarting else { return }
-                            showPaletteSets = true
-                        },
-                        foreground: paletteStore.isLight ? .black : .white
+                        foreground: foreground
                     )
+                    // Hidden while the board goes out and comes in (spec 69).
+                    .opacity(vm.headerOpacity)
+                    .accessibilityHidden(vm.headerOpacity == 0)
+                    // Over the scene, which is drawn on up under it.
+                    .zIndex(1)
                 GeometryReader { geo in
                     ZStack {
                         if let scene = vm.scene {
                             SpriteView(scene: scene, options: [.ignoresSiblingOrder])
+                                // Drawn on up to the top of the screen, under
+                                // the header, so a new board pours in from
+                                // there (spec 69); the board stays put.
+                                .padding(.top, -vm.sceneTopExtension)
+                                // And out over the side margins, so a bubble
+                                // at a wall isn't cut off (spec 72).
+                                .padding(.horizontal, -Self.boardSideMargin)
                         } else {
                             Color(uiColor: Palette.displayBackground)
                         }
@@ -62,20 +74,50 @@ struct RootView: View {
                     .padding(.top, GameViewModel.sceneTopInset(areaWidth: Double(geo.size.width)))
                     .onAppear {
                         Haptics.shared.prepareForButton()
-                        vm.prepare(containerSize: sceneContainerSize(for: geo.size))
+                        vm.prepare(
+                            containerSize: sceneContainerSize(for: geo.size),
+                            topExtension: sceneTopExtension(geo), sideExtension: Self.boardSideMargin
+                        )
                     }
-                    .onChange(of: geo.size) { vm.prepare(containerSize: sceneContainerSize(for: $0)) }
+                    .onChange(of: geo.size) {
+                        vm.prepare(
+                            containerSize: sceneContainerSize(for: $0),
+                            topExtension: sceneTopExtension(geo), sideExtension: Self.boardSideMargin
+                        )
+                    }
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, Self.boardSideMargin)
             }
             .ignoresSafeArea(edges: .bottom)
+            // `settings` and `restart` either side of the Dynamic Island,
+            // where the status bar was (spec 71); they come and go with the
+            // lives.
+            // The inset is read in the safe area and the row moved up by it:
+            // a reader that ignores the safe area sees no inset at all.
+            .overlay(alignment: .top) {
+                GeometryReader { screen in
+                    let inset = screen.safeAreaInsets.top
+                    IslandBarView(
+                        onSettings: {
+                            guard !isShowingGameOver, !vm.isChangingBoard else { return }
+                            showPaletteSets = true
+                        },
+                        onRestart: vm.restart,
+                        foreground: foreground
+                    )
+                    .frame(height: max(inset, IslandBarView.minHeight))
+                    .offset(y: -inset)
+                    .opacity(vm.headerOpacity)
+                    .accessibilityHidden(vm.headerOpacity == 0)
+                }
+            }
             // Own opacity, driven by `GameViewModel.gameOpacity` (spec 31):
             // zero while the game-over screen is up, animated back to one
             // by `dismissGameOver()` only after that screen has fully faded
             // out, so the two screens never show through each other.
             .opacity(vm.gameOpacity)
-            // No input during the restart fade out and in (spec 53).
-            .allowsHitTesting(!vm.isRestarting)
+            // No input while the board goes out and comes in (spec 69).
+            .allowsHitTesting(!vm.isChangingBoard)
 
             if showGameOverDemo {
                 GameOverScreen(
@@ -95,13 +137,32 @@ struct RootView: View {
                 GameOverScreen(info: info, onNewGame: vm.dismissGameOver)
                     .transition(.opacity)
             }
+
+            // The sets sheet leaves the board undimmed behind it, which
+            // takes touches through to the board; this catches them, so a
+            // tap anywhere outside the sheet closes it instead of firing,
+            // restarting or anything else (spec 74).
+            if showPaletteSets {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture { showPaletteSets = false }
+                    .accessibilityHidden(true)
+            }
         }
         .background(Color(uiColor: Palette.displayBackground).ignoresSafeArea())
+        // Its place is taken by `IslandBarView` (spec 71).
+        .statusBarHidden(true)
         // Light color scheme = dark status-bar content. Game screen: dark
         // content on a light palette background, light on a dark one. The
         // game-over screen follows its text: black text wants dark content.
         .preferredColorScheme(statusBarWantsDarkContent ? .light : .dark)
         .onChange(of: scenePhase) { if $0 != .active { vm.persistIfPossible() } }
+        // The icon follows the palette set (spec 66): at launch and on
+        // return, unless a palette sheet is open — it syncs when that closes.
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .active, !showPaletteSheet, !showPaletteSets { HomeScreenIcon.sync() }
+        }
         // Live repaint (spec 32 step 3): whenever the palette changes, push
         // the new colors onto every bubble node that already exists instead
         // of waiting for them to be recreated.
@@ -113,12 +174,18 @@ struct RootView: View {
             guard vm.gameOver == nil else { return }
             showPaletteSheet = true
         }
-        .sheet(isPresented: $showPaletteSheet) {
+        .sheet(isPresented: $showPaletteSheet, onDismiss: HomeScreenIcon.sync) {
             PaletteSheet()
         }
-        .sheet(isPresented: $showPaletteSets) {
+        .sheet(isPresented: $showPaletteSets, onDismiss: HomeScreenIcon.sync) {
             PaletteSetsSheet()
         }
+    }
+
+    /// From the top of the screen down to the top of the scene's container:
+    /// status bar, header and the gap above the board (spec 69).
+    private func sceneTopExtension(_ geo: GeometryProxy) -> CGFloat {
+        geo.frame(in: .global).minY + GameViewModel.sceneTopInset(areaWidth: Double(geo.size.width))
     }
 
     private func sceneContainerSize(for areaSize: CGSize) -> CGSize {

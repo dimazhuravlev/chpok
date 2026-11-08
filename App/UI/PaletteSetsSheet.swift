@@ -1,119 +1,90 @@
 import SwiftUI
 
-/// Test bottom sheet with every ready-made palette set (spec 56), opened by a
-/// long press on the score or the `-showPaletteSets` launch argument. On top,
-/// pinned, the dark/light theme switch (spec 57) and the aim-line switch
-/// (spec 60); below them a scrolling list
-/// where each row is a set's name and a tile in the set's background with its
-/// six colors as circles, flush like on the board — both as the current theme
-/// shows them. Tapping a row applies the set at once, so the board behind the
-/// sheet repaints live. The sheet stays at half height with the list
-/// scrolling inside it, so the board stays undimmed and playable above it and
-/// the colors can be judged as they really look.
+/// Test bottom sheet with every ready-made palette set (spec 56), opened by the
+/// `settings` button (spec 71) or the `-showPaletteSets` launch argument. On
+/// top the background slider from black to white (spec 64), a thick capsule
+/// (`CapsuleSlider`, spec 73); below it the sets' app icons in a row that goes
+/// round without end (`IconCarousel`, specs 75, 79, 80, 83), whose middle icon
+/// is the set in play, so the board behind the sheet repaints live as the icons
+/// go by, the way it does while the slider moves. No names: the icon says it.
+/// The sheet is only as tall as its content, and the board above it stays
+/// undimmed, so the colors can be judged as they really look; a tap on the
+/// board closes the sheet rather than playing (spec 74, `RootView`).
 struct PaletteSetsSheet: View {
     @ObservedObject private var store = PaletteStore.shared
-    @ObservedObject private var settings = SettingsStore.shared
 
-    private static let circleSize: CGFloat = 28
+    /// The slider's range as shown, black to white through the very greys
+    /// the background takes.
+    private static let backgroundStops = (0...10).map { step in
+        Color(uiColor: Palette.display(BackgroundAdaptation.background(lightness: Double(step) / 10)))
+    }
+    /// A tick every tenth of the way, and where the interface text flips
+    /// between white and black.
+    private static let backgroundDetents = (1...9).map { Double($0) / 10 } + [BackgroundAdaptation.polarityFlip]
 
-    private var isLight: Bool { store.appearance == .light }
+    /// Around the slider: as far in from the sides as down from the top
+    /// (spec 81).
+    private static let sliderInset: CGFloat = 28
+    /// The sheet's handle (spec 81): 40 long, a little longer than the
+    /// system one (36 × 5), and a quarter as strong, so it hints rather than
+    /// shows.
+    private static let handleSize = CGSize(width: 40, height: 5)
+    private static let handleTop: CGFloat = 5
+    /// The content's own height, which the sheet's height follows.
+    @State private var contentHeight: CGFloat = 320
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("theme", selection: appearance) {
-                Text(verbatim: "dark").tag(PaletteStore.Appearance.dark)
-                Text(verbatim: "light").tag(PaletteStore.Appearance.light)
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("appearancePicker")
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
-            .padding(.bottom, 8)
+            CapsuleSlider(
+                value: backgroundLightness,
+                stops: Self.backgroundStops,
+                detents: Self.backgroundDetents,
+                onEditingEnded: store.saveBackground
+            )
+            .accessibilityIdentifier("backgroundSlider")
+            .padding(.horizontal, Self.sliderInset)
+            .padding(.top, Self.sliderInset)
 
-            Toggle(isOn: showsTrajectory) {
-                Text(verbatim: "trajectory")
-                    .font(.appSemiBold(16))
-                    .foregroundStyle(.primary)
-            }
-            .accessibilityIdentifier("trajectoryToggle")
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(PaletteSet.all) { set in
-                        row(set)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 32)
+            IconCarousel()
+                .padding(.top, 32)
+                .padding(.bottom, 12)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { contentHeight = geo.size.height }
+                    .onChange(of: geo.size.height) { contentHeight = $0 }
             }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
+        // A container, so the slider and the rest keep identifiers of
+        // their own instead of all taking this one.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("paletteSetsSheet")
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-        .preferredColorScheme(isLight ? .light : .dark)
-    }
-
-    private var appearance: Binding<PaletteStore.Appearance> {
-        Binding(
-            get: { store.appearance },
-            set: { newValue in
-                Haptics.shared.selectionChanged()
-                store.setAppearance(newValue)
-            }
-        )
-    }
-
-    private var showsTrajectory: Binding<Bool> {
-        Binding(
-            get: { settings.showsTrajectory },
-            set: { settings.setShowsTrajectory($0) }
-        )
-    }
-
-    /// A color of the set as the current theme shows it.
-    private func shown(_ hex: UInt32) -> Color {
-        Color(uiColor: Palette.display(isLight ? LightTheme.color(for: hex) : hex))
-    }
-
-    private func row(_ set: PaletteSet) -> some View {
-        let isSelected = store.selectedSetId == set.id
-        return Button {
-            Haptics.shared.selectionChanged()
-            store.apply(set)
-        } label: {
-            HStack(spacing: 12) {
-                Text(verbatim: set.name)
-                    .font(.appSemiBold(16))
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: 0) {
-                    ForEach(set.colors.indices, id: \.self) { i in
-                        Circle()
-                            .fill(shown(set.colors[i]))
-                            .frame(width: Self.circleSize, height: Self.circleSize)
-                    }
-                }
-                .padding(8)
-                .background(shown(set.background), in: RoundedRectangle(cornerRadius: 12))
-                // In the light theme the white tile sits on the sheet's own
-                // white; a hairline keeps its edge.
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(.black.opacity(isLight ? 0.1 : 0), lineWidth: 1)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? Color.primary : .clear, lineWidth: 2)
-                        .padding(-2)
-                }
-            }
-            .contentShape(Rectangle())
+        .presentationDetents([.height(contentHeight)])
+        // Our own handle in place of the system one, which can't be styled.
+        .overlay(alignment: .top) {
+            Capsule()
+                .fill(Color(uiColor: .tertiaryLabel).opacity(0.25))
+                .frame(width: Self.handleSize.width, height: Self.handleSize.height)
+                .padding(.top, Self.handleTop)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("paletteSet.\(set.id)")
+        .presentationDragIndicator(.hidden)
+        // All four corners alike (spec 85). By default the top ones are
+        // tighter than the bottom ones, which follow the screen's own
+        // corners; 52 keeps the bottom ones as they were (measured).
+        .presentationCornerRadius(52)
+        .presentationBackgroundInteraction(.enabled(upThrough: .height(contentHeight)))
+        .preferredColorScheme(store.isLight ? .light : .dark)
+    }
+
+    /// The slider's value; it ticks on its own (`CapsuleSlider`).
+    private var backgroundLightness: Binding<Double> {
+        Binding(
+            get: { store.backgroundLightness },
+            set: { store.setBackgroundLightness($0) }
+        )
     }
 }

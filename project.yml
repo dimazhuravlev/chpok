@@ -22,8 +22,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.dimazhuravlev.chpok
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Every other AppIcon-<set id> in the catalog becomes an alternate
+        # icon, one per palette set (spec 66, scripts/make-app-icon.py).
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         INFOPLIST_KEY_CFBundleDisplayName: "Chpok!"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # No status bar from launch on (spec 71, RootView).
+        INFOPLIST_KEY_UIStatusBarHidden: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         SWIFT_VERSION: "5.0"

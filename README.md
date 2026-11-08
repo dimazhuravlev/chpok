@@ -19,6 +19,7 @@ The project is built, tested and run through the scripts in `scripts/`. Each one
 | `scripts/run-gameover-demo.sh` | Same as `run-sim.sh`, but launches with `-showGameOverDemo` so the app opens straight into the fullscreen game-over screen (sample data) instead of a fresh board — useful for eyeballing that screen without playing a match to the end. |
 | `scripts/test-core.sh` | Runs the core engine's unit tests (`swift test` in `Packages/BubbleShooterCore`). |
 | `scripts/test-ui.sh` | Builds and runs the UI test bundle (`BubbleShooterUITests`) on the simulator via `xcodebuild test`. Log: `build/xcodebuild-test.log`. |
+| `scripts/make-app-icon.py` | Draws the app icons, one per palette set: a circle of one set color on another (each set's `icon` pair in `PaletteSets.swift`; the sets sheet draws the same icons in-app, `AppIconView`). The default set — the first in `PaletteSet.all` — gets the primary icon, the others alternate icons the app switches to with the set. Re-run after adding a set or changing its colors or icon pair. |
 
 Run them in that rough order (`test-core` → `build` → `test-ui` → `run-sim`) for a full check of a change.
 
@@ -46,7 +47,7 @@ Signing for distribution is picked automatically: `project.yml` sets `CODE_SIGN_
 
 - **`Packages/BubbleShooterCore`** — a platform-independent Swift package with the game engine (no UIKit/SwiftUI/SpriteKit imports). `GameEngine` advances state on a fixed **15 ms** tick (`GameConsts.tickMs`), driven by a single `TimerQueue` that replaces the original's one-Phaser-timer-per-bubble scheme with an equivalent deterministic global tick. State changes are reported as a stream of `GameEvent`s (score changed, bubble removed, game over, …) for the app layer to consume. `GameEngine` can be created fresh or restored from a `GameSnapshot`, and is covered by its own test target, `BubbleShooterCoreTests`.
 - **`App`** — the iOS app. `GameViewModel` (`ObservableObject`) owns the `GameEngine`/`GameScene` pair and republishes their state to SwiftUI views (`RootView`, `HUDView`, `GameOverScreen`). `GameScene` (SpriteKit) renders the board and turns taps into shots. `GameSaveStore` persists the single in-progress match as JSON under Application Support; `GameViewModel` loads it on launch and saves on backgrounding/turn resolution.
-- **`UITests`** — `SmokeUITests` (app launches), `GameplayUITests` (tap-to-fire, Restart resets the board, gameplay screenshot), `PersistenceUITests` (save/resume across a relaunch).
+- **`UITests`** — `SmokeUITests` (app launches), `GameplayUITests` (tap-to-fire, Restart resets the board, gameplay screenshot), `PersistenceUITests` (save/resume across a relaunch), `PaletteSheetUITests` (the background slider follows the finger; the icon carousel picks the set in its middle).
 
 ## Game rules and constants (from the original)
 
@@ -55,7 +56,7 @@ Signing for distribution is picked automatically: `project.yml` sets `CODE_SIGN_
 - A landing cluster of same-colored, ceiling-connected bubbles pops once it reaches **3+** bubbles.
 - Score per popped bubble: **`ceil(k/3)`**, where `k` is the bubble's 1-based position within the cluster (1, 1, 1, 2, 2, 2, 3, …).
 - Bubbles left disconnected from the ceiling after a pop ("hanging") are swept separately and score a flat **10** each.
-- **5** starting lives; each miss costs one life; once lives reach 0, a miss instead adds **`1 + (colors currently absent from the board)`** new row(s) at the top.
+- **5** starting lives; each miss costs one life; once lives reach 0, a miss instead adds **`1 + (colors currently absent from the board)`** new row(s) at the top: the board first slides down to make room, then the new bubbles appear one by one in a quick wave, left to right, each fading in as it drops the last little way into its cell.
 - Winning (board fully cleared) doubles the score: final = `score + bonus`, with `bonus = score`.
 
 The full derivation of these rules — every timer, coordinate formula and quirk — was written up while porting and is kept outside this repository.
@@ -63,10 +64,11 @@ The full derivation of these rules — every timer, coordinate formula and quirk
 ## Deliberate deviations from the original
 
 - **Loss boundary is measured from the cannon**, not the original's hardcoded `boardCoordY > 14 && pixelY > 470` (a fixed offset from the top of its 800×600 canvas). The port derives the equivalent thresholds from the cannon's own Y position instead, so the loss line scales with the on-screen layout rather than being pixel-fixed — a conscious choice made for the full-screen portrait layout below.
-- **Layout**: portrait only; the board is stretched to fill the screen beneath the HUD header, instead of the original's fixed 800×600 desktop canvas.
-- **Release = shoot**: the shot goes off when the finger lifts, toward the lift point, so a press can be slid to adjust the aim; the original fires on pointer-down. An optional aim line (the `trajectory` switch in the palette-sets sheet, opened by a long press on the score) shows the shot's exact path, wall bounces included, while the finger is down.
+- **Layout**: portrait only; the board is stretched to fill the screen beneath the HUD header, instead of the original's fixed 800×600 desktop canvas. The status bar is hidden; in its place, either side of the Dynamic Island, sit `settings` (the palette-sets sheet: background slider and a carousel of the app icons, one per set, in the set's colors on the current background and going round without end, where the icon resting in the middle is the set in play) and `restart`, and the header below holds only the lives, centered; no score is shown anywhere, the game-over screen gives the time.
+- **Board in and out**: a new match's board pours in from the top of the screen, row after row from the bottom, and only then do the lives, `settings` and `restart` fade in; Restart first collapses the board, bubbles falling off row after row from the bottom like hanging ones do in play. A resumed match just fades in. The scene is drawn up under the header to make room for the pour, and out over the board's side margins to the screen edges, so a bubble at a wall is never cut off.
+- **Release = shoot**: the shot goes off when the finger lifts, toward the lift point, so a press can be slid to adjust the aim; the original fires on pointer-down. An aim line shows the exact path of a bank shot — one that bounces off a wall — while the finger is down; a straight shot gets no line.
 - Board uses true hexagonal packing: row height is 32·√3/2 ≈ 27.71 instead of the original's 32, so all six neighbours of a cell are exactly one bubble diameter apart and the rows have no gaps between them.
-- Bubbles are drawn 30 px wide on a 32 px grid with no stroke, leaving an even 2 px gap; the app is rendered on a pure black background (white in the light theme).
+- Bubbles are drawn 30 px wide on a 32 px grid with no stroke, leaving an even 2 px gap, with a glass look borrowed from the iOS 26 app icon (lighter top, darker bottom, a thin light rim, `BubbleNode`); the background is pure black by default; a slider in the palette-sets sheet (`settings`) — a thick capsule whose inner capsule fills it with the black-to-white range, stretching and springing under the finger with haptics (`CapsuleSlider`) — moves it through greys to pure white, and the bubble colors adapt to it (`BackgroundAdaptation`): on black they are exactly as authored.
 - Rows alternate 17 and 16 bubbles so both board edges are straight; the parity reference flips with every dropped row, so the board keeps its silhouette and no longer shifts sideways.
 
 ## Not ported

@@ -29,7 +29,10 @@ final class GameplayUITests: XCTestCase {
             "unexpected initial value: \(initialValue)"
         )
 
-        // Cannon is locked for ~500ms after init; wait it out before firing.
+        // A new match pours in first, with input off, and the header comes
+        // back once it's in (spec 69); the cannon is then locked for ~500ms.
+        XCTAssertTrue(app.buttons["restartButton"].waitForExistence(timeout: 10), "header never came back after the pour")
+        app.dismissIconChangeAlert()
         Thread.sleep(forTimeInterval: 1.0)
 
         scene.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()

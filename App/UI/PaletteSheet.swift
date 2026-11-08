@@ -86,9 +86,9 @@ struct PaletteSheet: View {
         .accessibilityIdentifier("paletteSheet")
         .presentationDetents([.height(contentHeight)])
         .presentationDragIndicator(.visible)
-        // Follows the theme (spec 57): dark sheet, white text in the dark
-        // theme; light sheet, black text in the light one.
-        .preferredColorScheme(store.appearance == .light ? .light : .dark)
+        // Follows the background (spec 64): dark sheet, white text on a dark
+        // one; light sheet, black text on a light one.
+        .preferredColorScheme(store.isLight ? .light : .dark)
         .onAppear {
             Haptics.shared.prepareForButton()
         }

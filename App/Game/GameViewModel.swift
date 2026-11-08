@@ -73,11 +73,14 @@ final class GameViewModel: ObservableObject {
     /// starts this only after `gameOverFadeDuration` has elapsed so the two
     /// screens never cross-fade over each other.
     static let gameFadeInDuration: Double = 0.8
-    /// Restart button (spec 53): the whole game screen fades to black over
-    /// this long, then the board is reset behind the black.
-    static let restartFadeOutDuration: Double = 0.3
-    /// ...and the fresh game appears out of the black over this long.
-    static let restartFadeInDuration: Double = 0.5
+    /// The header fades out over this long as a restart's collapse starts
+    /// (spec 69)...
+    static let headerFadeOutDuration: Double = 0.25
+    /// ...and back in over this long once a new board has poured in.
+    static let headerFadeInDuration: Double = 0.4
+    /// Pause between the app's first frame and the pour of a new board at
+    /// launch (spec 69), so it doesn't start on the very first frames.
+    static let launchPourDelay: Double = 0.15
     /// Extra lift (points) applied to both the cannon and queue-bubble
     /// positions in `prepare(containerSize:)` (spec 31): the queue bubble
     /// used to be clipped by the bottom edge, so both move up by this same
@@ -95,19 +98,26 @@ final class GameViewModel: ObservableObject {
     @Published var gameOver: GameOverInfo?
     /// Opacity of the game screen's own container (spec 31): 0 while the
     /// game-over screen is showing (set the instant it appears, with no
-    /// animation — see `onGameOver` below), animated back to 1 by
-    /// `dismissGameOver()` only after the game-over screen has fully faded
-    /// out. `restart()` takes it 1 → 0 → 1 (spec 53): the screen goes to
-    /// black, the board is reset there, and the new match fades in. Otherwise
-    /// it stays at 1 during play.
-    /// Starts at 0 so the very first appearance of the game — app launch —
-    /// fades in over `gameFadeInDuration` exactly like the one after the
-    /// game-over screen, rather than snapping in (owner request).
+    /// animation — see `onGameOver` below), back to 1 as it fades out, with
+    /// the new board pouring in behind it (spec 69). Otherwise it stays at 1
+    /// during play.
+    /// Starts at 0: a resumed match fades in over `gameFadeInDuration` at
+    /// launch (owner request), a new one is shown at once and poured in.
     @Published var gameOpacity: Double = 0
-    /// True for the whole restart transition (fade out + fade in, spec 53):
-    /// `RootView` blocks input on the game container meanwhile, and
-    /// `restart()` ignores repeated taps.
-    @Published var isRestarting = false
+    /// Opacity of the header — lives and Restart (spec 69): it goes away as
+    /// a restart's collapse starts and comes back once a new board has
+    /// poured in, so the board arrives on an empty screen. Hidden until
+    /// `prepare` knows whether the match is new (it pours in) or resumed
+    /// (the header fades in with the game).
+    @Published var headerOpacity: Double = 0
+    /// True while the board is being animated out or in — a restart's
+    /// collapse, any pour (spec 69): `RootView` blocks input on the game
+    /// container meanwhile, and `restart()` ignores repeated taps.
+    @Published var isChangingBoard = false
+    /// How far (points) the scene is drawn on above its container, up to the
+    /// top of the screen (spec 69) — fixed with the scene in `prepare`, so
+    /// the view and the scene's size always agree.
+    @Published private(set) var sceneTopExtension: CGFloat = 0
     /// Exact format `bubbles:<N> score:<S> lives:<L>`, N = `engine.boardBubbles.count`.
     @Published var status: String = "bubbles:0 score:0 lives:5"
 
@@ -159,7 +169,13 @@ final class GameViewModel: ObservableObject {
     /// down, and the input area's bottom edge 64
     /// logical units above the cannon (unchanged from `GameLayout.fitting`'s
     /// own gap).
-    func prepare(containerSize: CGSize) {
+    /// `topExtension` (points) is how far the screen goes on above the
+    /// container — header, the buttons in place of the status bar: the
+    /// scene is drawn up to the top of the screen so a new board can pour in
+    /// from there (spec 69). `sideExtension` (points) is how far it goes on
+    /// past each side, over the board's side margins, so a bubble at a wall
+    /// isn't cut off (spec 72).
+    func prepare(containerSize: CGSize, topExtension: CGFloat = 0, sideExtension: CGFloat = 0) {
         guard engine == nil, containerSize.width > 0, containerSize.height > 0 else { return }
 
         if CommandLine.arguments.contains("-resetSave") {
@@ -181,19 +197,32 @@ final class GameViewModel: ObservableObject {
             inputAreaMaxY: inputAreaMaxY,
             queuePosition: Vec2(x: cannonPivotX, y: queueY)
         )
+        // No saved match: a new one, which pours in (spec 69).
+        let isNewMatch = store.load() == nil
         let engine = makeEngine(layout)
-        let scene = GameScene(engine: engine, canvasHeight: canvasHeight)
+        let scene = GameScene(
+            engine: engine, canvasHeight: canvasHeight,
+            topExtension: Double(topExtension) / scale, sideExtension: Double(sideExtension) / scale
+        )
 
-        // First appearance: the view starts at `gameOpacity == 0`, so fade
-        // the whole screen in once the scene actually exists.
+        // First appearance: the view starts at `gameOpacity == 0`. A resumed
+        // match fades in once the scene exists; a new one is shown at once —
+        // an empty screen — and its board pours in.
         defer {
-            withAnimation(.easeInOut(duration: Self.gameFadeInDuration)) {
+            if isNewMatch {
                 gameOpacity = 1
+                pourBoard(after: Self.launchPourDelay)
+            } else {
+                withAnimation(.easeInOut(duration: Self.gameFadeInDuration)) {
+                    gameOpacity = 1
+                    headerOpacity = 1
+                }
             }
         }
 
         self.engine = engine
         self.scene = scene
+        sceneTopExtension = topExtension
         score = engine.score
         livesLeft = engine.livesLeft
         maxLives = engine.maxLives
@@ -281,50 +310,33 @@ final class GameViewModel: ObservableObject {
         status = "bubbles:\(engine.boardBubbles.count) score:\(engine.score) lives:\(engine.livesLeft)"
     }
 
-    /// Restart button (spec 53): the whole game screen fades to black over
-    /// `restartFadeOutDuration`, the board is reset behind the black, and the
-    /// new game fades in over `restartFadeInDuration`. The scene is paused for
-    /// the fade-out so a bubble in flight can't land (or end the match) in the
-    /// middle of the transition, and input is off until the fade-in is done.
-    /// Only `scene.isPaused` is used, not the `SKView`'s own pause: a paused
-    /// view keeps showing its last drawn frame (the old board), so the fade-in
-    /// would start on it. The fade-in starts from `runAfterNextFrame`, once
-    /// the scene has run a frame with the rebuilt board (spec 54).
+    /// Restart button (spec 69): the header fades out and the board
+    /// collapses, row after row from the bottom; behind the empty screen the
+    /// match is reset, the new board pours in, and the header comes back.
+    /// The scene freezes the engine for all of it, so a bubble in flight
+    /// can't land (or end the match) in the middle of the transition, and
+    /// input is off until the header is back.
     /// Only reachable during active play — the header sits behind the
     /// game-over screen once it's showing — but `gameOver = nil` stays in the
     /// reset, as before.
     func restart() {
-        guard let engine, let scene, !isRestarting else { return }
-        isRestarting = true
-        scene.isPaused = true
-        withAnimation(.easeInOut(duration: Self.restartFadeOutDuration), completionCriteria: .logicallyComplete) {
-            gameOpacity = 0
-        } completion: { [weak self] in
+        guard let engine, let scene, !isChangingBoard else { return }
+        isChangingBoard = true
+        withAnimation(.easeOut(duration: Self.headerFadeOutDuration)) {
+            headerOpacity = 0
+        }
+        scene.collapseBoard { [weak self] in
             guard let self else { return }
             engine.resetBoard()
-            withAnimation(.easeInOut(duration: Self.gameOverFadeDuration)) {
-                self.gameOver = nil
-            }
+            self.gameOver = nil
             scene.rebuild()
-            scene.runAfterNextFrame { [weak self] in
-                guard let self else { return }
-                withAnimation(.easeInOut(duration: Self.restartFadeInDuration), completionCriteria: .logicallyComplete) {
-                    self.gameOpacity = 1
-                } completion: { [weak self] in
-                    self?.isRestarting = false
-                }
-            }
-            scene.isPaused = false
+            self.pourBoard(after: 0)
         }
     }
 
-    /// OK button on the game-over popup. Unlike `restart()`, this sequences
-    /// the two screens explicitly (spec 31) instead of relying on the
-    /// freshly reset game scene showing through the game-over screen's own
-    /// fade-out: the game-over screen fades out over `gameOverFadeDuration`,
-    /// and only once that has fully elapsed does the game scene — already
-    /// reset, still sitting at `gameOpacity == 0` since `onGameOver` fired —
-    /// fade in over `gameFadeInDuration`.
+    /// New game on the game-over screen. The match is reset at once, behind
+    /// the overlay as it fades out over `gameOverFadeDuration`; then the new
+    /// board pours in (`fadeGameInAfterOverlay`).
     func dismissGameOver() {
         guard let engine, let scene else { return }
         engine.resetBoard()
@@ -335,18 +347,28 @@ final class GameViewModel: ObservableObject {
         fadeGameInAfterOverlay()
     }
 
-    /// Second half of the game-over to game transition: wait out the
-    /// overlay's own fade, then bring the game screen back. Split out so the
-    /// debug demo can run the exact same sequence a player sees — dismissing
-    /// the demo used to only hide the overlay, leaving the game fully opaque
-    /// underneath, which made the transition look like it wasn't there.
+    /// Second half of the game-over to game transition: the game screen
+    /// comes back at once, empty — the board is out of sight and the header
+    /// hidden, so nothing shows through the fading overlay — and the board
+    /// pours in once the overlay is gone. Split out so the debug demo can run
+    /// the exact same sequence a player sees.
     func fadeGameInAfterOverlay() {
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.gameOverFadeDuration * 1_000_000_000))
+        pourBoard(after: Self.gameOverFadeDuration)
+        gameOpacity = 1
+    }
+
+    /// Pours the scene's board in (spec 69) with the header hidden, and
+    /// brings the header back once it's in. Input is off meanwhile.
+    private func pourBoard(after delay: Double) {
+        guard let scene else { return }
+        isChangingBoard = true
+        headerOpacity = 0
+        scene.pourIn(after: delay) { [weak self] in
             guard let self else { return }
-            withAnimation(.easeIn(duration: Self.gameFadeInDuration)) {
-                self.gameOpacity = 1
+            withAnimation(.easeInOut(duration: Self.headerFadeInDuration)) {
+                self.headerOpacity = 1
             }
+            self.isChangingBoard = false
         }
     }
 

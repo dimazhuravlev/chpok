@@ -4,11 +4,12 @@ import BubbleShooterCore
 /// Full-screen game-over screen (spec 26, reworked to the owner's mockups in
 /// spec 36): the background pulses through all six bubble colors, and the
 /// content is the win/lose title at the top, the new-game button at the
-/// bottom and the result lines at the center of the screen:
-/// `score N`, then the time (`new best time` when this match set the personal
-/// best, plain `time` otherwise), then the *previous* best muted underneath
-/// for comparison (nothing when there was none). Both outcomes show the
-/// result lines; only the "new best time" wording is reserved for a win.
+/// bottom and the result lines at the center of the screen: the time
+/// (`new best time` when this match set the personal best, plain `time`
+/// otherwise), then the *previous* best muted underneath for comparison
+/// (nothing when there was none). No score (spec 90): the game shows none
+/// anywhere now. Both outcomes show the result lines; only the "new best
+/// time" wording is reserved for a win.
 struct GameOverScreen: View {
     let info: GameOverInfo
     let onNewGame: () -> Void
@@ -33,17 +34,10 @@ struct GameOverScreen: View {
     private static let titleTopPadding: CGFloat = 48
 
     // Result lines (spec 36 mockups). In the mockups the tops of the letters
-    // are 56pt apart from the score line to the time line and 34pt apart from
-    // the time line to the previous-best line, so the previous best is tucked
-    // up against the time. Pretendard-SemiBold at 32pt sets a 38.19pt line, so
-    // for the second pair that is a *negative* stack spacing. The first pair
-    // is 0.78pt more than 56 between baselines: the dot of the "i" that tops
-    // the lines below stands 0.78pt higher than the tallest digits of the
-    // score line. (All of this is tuned to Pretendard; with SF Rounded the
-    // lines may sit slightly differently, so re-check the spacings below when
-    // switching to it for good — spec 55 left them untouched for the test.)
-    /// Gap between the score line and the time line.
-    private static let scoreToTimeSpacing: CGFloat = 18.6
+    // are 34pt apart from the time line to the previous-best line, so the
+    // previous best is tucked up against the time. Pretendard-SemiBold at
+    // 32pt sets a 38.19pt line, so that is a *negative* stack spacing. (Tuned
+    // to Pretendard; with SF Rounded the lines may sit slightly differently.)
     /// Gap between the time line and the previous-best line (negative: see above).
     private static let timeToBestSpacing: CGFloat = -4.2
     /// Opacity of the standing-record line.
@@ -94,8 +88,8 @@ struct GameOverScreen: View {
                 .padding(.bottom, 32)
             }
 
-            // Score, time and the standing record show on both outcomes
-            // (owner request). `timeLabel` already guards the "new best
+            // Time and the standing record show on both outcomes (owner
+            // request). `timeLabel` already guards the "new best
             // time" wording behind a win, so a loss can only ever read
             // "time".
             resultLines
@@ -109,26 +103,22 @@ struct GameOverScreen: View {
         .onDisappear(perform: stopCycling)
     }
 
-    /// Score, time and previous best, centered on the screen itself — the
+    /// Time and previous best, centered on the screen itself — the
     /// mockups have the block at the exact vertical center of the display, so
     /// it ignores the safe areas instead of being centered between the title
     /// and the button (which would sit it ~22pt low: the top and bottom
     /// insets and paddings are not symmetric). Labels only, so it never
     /// intercepts taps meant for the button underneath.
     private var resultLines: some View {
-        VStack(spacing: Self.scoreToTimeSpacing) {
-            Text(verbatim: "score \(info.total)")
-                .accessibilityIdentifier("gameOverTotal")
-            VStack(spacing: Self.timeToBestSpacing) {
-                Text(verbatim: "\(info.timeLabel) \(info.timeText)")
-                    .accessibilityIdentifier("gameOverTime")
-                // The best as it was before this match, for comparison; no
-                // record yet means no line at all, not a placeholder.
-                if let bestText = info.bestText {
-                    Text(verbatim: "best time \(bestText)")
-                        .foregroundStyle(textColor.opacity(Self.previousBestOpacity))
-                        .accessibilityIdentifier("gameOverBest")
-                }
+        VStack(spacing: Self.timeToBestSpacing) {
+            Text(verbatim: "\(info.timeLabel) \(info.timeText)")
+                .accessibilityIdentifier("gameOverTime")
+            // The best as it was before this match, for comparison; no record
+            // yet means no line at all, not a placeholder.
+            if let bestText = info.bestText {
+                Text(verbatim: "best time \(bestText)")
+                    .foregroundStyle(textColor.opacity(Self.previousBestOpacity))
+                    .accessibilityIdentifier("gameOverBest")
             }
         }
         .font(.appSemiBold(32))

@@ -49,7 +49,47 @@ final class GameScene: SKScene {
 
     private let engine: GameEngine
     private let geometry: SceneGeometry
+    /// Scene height above the canvas, logical units (spec 69): the view runs
+    /// on up under the header to the top of the screen, so a new board can
+    /// pour in from there. Nothing of the game lives in it.
+    private let topExtension: Double
+    /// Scene width past each side of the board, logical units (spec 72): the
+    /// view runs on out to the screen edges, over the board's side margins,
+    /// so a bubble at a wall — squashed by the bounce, popping, falling — is
+    /// drawn whole instead of cut off at the board's edge. The board keeps
+    /// its coordinates: `anchorPoint` puts the scene's origin at the board's
+    /// left edge, not the view's.
+    private let sideExtension: Double
     private let haptics = Haptics.shared
+
+    // MARK: - Board in and out (spec 69)
+
+    /// While true the engine stands still — no ticks, no events, no `sync()`
+    /// — so the board can be animated out and in without the game moving
+    /// under it: from the start of a restart's collapse to the end of the
+    /// new board's pour.
+    private(set) var isEngineFrozen = false
+    /// The collapse starts its rows this far apart, the bottom row first.
+    private let collapseRowStep: TimeInterval = 0.05
+    /// The pour starts its rows this far apart, the bottom row first.
+    private let pourRowStep: TimeInterval = 0.06
+    /// Every bubble's own random delay on top of its row's, up to this.
+    private let boardJitter: TimeInterval = 0.12
+    /// Gravity of the pour, logical units per second squared: a bubble
+    /// falls to the top row in about 0.3 s, to the bottom one in 0.4.
+    private let pourGravity: CGFloat = 6000
+    /// Squash of a poured bubble as it lands.
+    private let pourLandingSquash: CGFloat = 0.18
+    /// The cannon and queue bubbles slide up into place and fade in once the
+    /// board is in: over this long, from this far below (logical units)...
+    private let pourAppearDuration: TimeInterval = 0.4
+    private let pourAppearOffset: CGFloat = 30
+    /// ...the queue bubble this much after the cannon's.
+    private let pourAppearStagger: TimeInterval = 0.06
+    /// How long a bubble falls off the board — a hanging one in play, and
+    /// every one in a restart's collapse.
+    private let fallDuration: TimeInterval = 0.45
+    private let boardTransitionKey = "boardTransition"
 
     /// Live bubble nodes keyed by `Bubble.id`.
     private var nodes: [Int: SKNode] = [:]
@@ -84,10 +124,28 @@ final class GameScene: SKScene {
     /// It brightens to 1 over `queueMoveDuration`, in step with its slide
     /// into the cannon; anything not `.inQueue` is always fully opaque.
     private let queueBubbleAlpha: CGFloat = 0.4
-    /// Duration for a new row's appearance (spec 21 step 4): existing
-    /// bubbles glide down to their post-row-add position, new top-row
-    /// bubbles fade in from zero alpha, both over this same span.
-    private let rowAddDuration: TimeInterval = 0.3
+    // MARK: New rows (spec 76)
+
+    /// A new row comes in two steps: first the whole board slides down to
+    /// make room, over `rowShiftDuration`; then, `rowWaveLead` into the
+    /// slide — as soon as the empty row shows (spec 89) — the new bubbles
+    /// start to appear in their cells one by one, left to right — a quick
+    /// wave, each fading in as it drops into its cell from `rowAppearDrop`
+    /// above over `rowAppearDuration` (spec 87; it grew in place before).
+    /// With more than one row added, the lowest goes first and each next one
+    /// up `rowWaveRowDelay` later.
+    private let rowShiftDuration: TimeInterval = 0.28
+    private let rowWaveLead: TimeInterval = 0.1
+    private let rowAppearDuration: TimeInterval = 0.22
+    /// From the first bubble of a row starting to appear to the last.
+    private let rowWaveDuration: TimeInterval = 0.3
+    private let rowWaveRowDelay: TimeInterval = 0.1
+    /// Logical units: a third of a bubble.
+    private let rowAppearDrop: CGFloat = 10
+    private let rowAppearKey = "rowAppear"
+    /// How many rows the last `.rowsAdded` brought: which of the new
+    /// bubbles' rows is the lowest.
+    private var rowsAddedThisFrame = 0
     /// Below this (logical units), a target "change" is just float noise
     /// from re-deriving the same position — snap instead of animating.
     private let moveThreshold: Double = 1.0
@@ -149,7 +207,8 @@ final class GameScene: SKScene {
     }()
     /// Thickness of the aim line, points on screen.
     private let trajectoryWidth: CGFloat = 1.5
-    /// White over the dark theme, black over the light one, at this opacity.
+    /// White over a dark background, black over a light one (`PaletteStore.isLight`),
+    /// at this opacity.
     private let trajectoryOpacity: CGFloat = 0.12
     /// Over this last stretch the line fades into the background, so it
     /// doesn't end in a cut just short of the bubbles it would hit (scene
@@ -203,11 +262,15 @@ final class GameScene: SKScene {
     var onBoardReset: (() -> Void)?
     var onLivesChanged: ((Int, Int) -> Void)?
 
-    init(engine: GameEngine, canvasHeight: Double) {
+    init(engine: GameEngine, canvasHeight: Double, topExtension: Double = 0, sideExtension: Double = 0) {
         self.engine = engine
         self.geometry = SceneGeometry(canvasHeight: canvasHeight)
+        self.topExtension = topExtension
+        self.sideExtension = sideExtension
         self.queueStep = engine.layout.queuePosition.y - engine.layout.cannonY
-        super.init(size: CGSize(width: GameConsts.boardLogicalWidth, height: canvasHeight))
+        let width = GameConsts.boardLogicalWidth + 2 * sideExtension
+        super.init(size: CGSize(width: width, height: canvasHeight + topExtension))
+        anchorPoint = CGPoint(x: sideExtension / width, y: 0)
         scaleMode = .aspectFit
         backgroundColor = Palette.background
         sync()
@@ -275,7 +338,7 @@ final class GameScene: SKScene {
     /// (spec 59) — a press can be slid to adjust the aim first.
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         aimPoint = nil
-        guard let touch = touches.first else { return }
+        guard !isEngineFrozen, let touch = touches.first else { return }
         let point = touch.location(in: self)
         let corePoint = geometry.corePoint(point)
         if engine.fire(toward: corePoint) {
@@ -307,6 +370,13 @@ final class GameScene: SKScene {
             dt = 0
         }
         lastUpdateTime = currentTime
+
+        // Spec 69: the board is being animated out or in; only the jelly
+        // (the landing squashes of the pour) goes on.
+        guard !isEngineFrozen else {
+            jelly.step(dt)
+            return
+        }
 
         accumulator += dt
         var ticks = 0
@@ -340,12 +410,14 @@ final class GameScene: SKScene {
 
     /// Spec 60: redraws the aim line every frame while the finger is down —
     /// the board moves under it (new rows, matches) even when the finger
-    /// doesn't. Hidden when the setting is off, nothing is ready to fire, or
-    /// the finger is outside the area a shot can be aimed from.
+    /// doesn't. Always on (spec 78: no longer a setting). Hidden when nothing
+    /// is ready to fire, or the finger is outside the area a shot can be
+    /// aimed from — and for a straight shot (spec 65): the line is for bank shots only, a shot that
+    /// doesn't bounce goes where the finger points anyway.
     private func updateTrajectory() {
-        guard SettingsStore.shared.showsTrajectory,
-              let aimPoint,
+        guard let aimPoint,
               let points = engine.predictedPath(toward: geometry.corePoint(aimPoint)),
+              Self.bouncesOffWall(points),
               let first = points.first
         else {
             trajectoryNode.isHidden = true
@@ -360,6 +432,12 @@ final class GameScene: SKScene {
         updateTrajectoryColors()
         trajectoryNode.lineWidth = trajectoryWidth * (view?.contentScaleFactor ?? 1) / pixelsPerUnit
         trajectoryNode.isHidden = false
+    }
+
+    /// Whether a `predictedPath` meets a wall: every bounce puts its two
+    /// points exactly on one.
+    private static func bouncesOffWall(_ points: [Vec2]) -> Bool {
+        points.contains { $0.x == GameConsts.leftBoardBorder || $0.x == GameConsts.rightBoardBorder }
     }
 
     /// Feeds the shader the background and the line's color — white or
@@ -430,8 +508,8 @@ final class GameScene: SKScene {
     ///   bubble that just landed, whose target was dropped while it was
     ///   `.launched`), it snaps into place immediately, same as a brand-new
     ///   node would. A real target change starts one move action (0.18s
-    ///   ease-out for a queue/cannon slide, 0.3s linear while a row is being
-    ///   added); anything smaller than `moveThreshold` is left alone so the
+    ///   ease-out for a queue/cannon slide, `rowShiftDuration` ease-in-out
+    ///   while a row is being added, spec 76); anything smaller than `moveThreshold` is left alone so the
     ///   in-flight action isn't restarted every tick.
     /// Spec 44: a launched bubble is also always fully opaque (its fade is
     /// cancelled and alpha set to 1 on the spot), and a node that left
@@ -450,7 +528,10 @@ final class GameScene: SKScene {
             return
         }
 
-        if bubble.state != .inQueue, node.alpha < 1, node.action(forKey: fadeActionKey) == nil {
+        // Not a new row's bubble waiting hidden for its wave (spec 76): it
+        // shows when its turn comes, not now.
+        if bubble.state != .inQueue, node.alpha < 1, node.action(forKey: fadeActionKey) == nil,
+           node.action(forKey: rowAppearKey) == nil {
             let brighten = SKAction.fadeAlpha(to: 1, duration: queueMoveDuration)
             brighten.timingMode = .easeOut
             node.run(brighten, withKey: fadeActionKey)
@@ -466,10 +547,8 @@ final class GameScene: SKScene {
         targets[bubble.id] = bubble.position
 
         node.removeAction(forKey: moveActionKey)
-        let move = SKAction.move(to: scenePos, duration: addingRow ? rowAddDuration : queueMoveDuration)
-        if !addingRow {
-            move.timingMode = .easeOut
-        }
+        let move = SKAction.move(to: scenePos, duration: addingRow ? rowShiftDuration : queueMoveDuration)
+        move.timingMode = addingRow ? .easeInEaseOut : .easeOut
         node.run(move, withKey: moveActionKey)
     }
 
@@ -486,8 +565,8 @@ final class GameScene: SKScene {
     ///   (spec 44) — a restored game or a rebuilt scene gets it too, since
     ///   those create fresh nodes through here.
     /// - During a row-add frame, a brand-new top-row `.onBoard` bubble
-    ///   starts at zero alpha and fades in over `rowAddDuration`, in place
-    ///   (it's already at its final position, nothing to slide).
+    ///   starts hidden in its cell and appears there in the wave once the
+    ///   board has slid down (`appearInWave`, spec 76).
     private func placeNewNode(node: BubbleNode, bubble: Bubble, scenePos: CGPoint, addingRow: Bool) {
         if bubble.state == .inQueue {
             targets[bubble.id] = bubble.position
@@ -508,9 +587,43 @@ final class GameScene: SKScene {
         targets[bubble.id] = bubble.position
         node.position = scenePos
         if addingRow {
-            node.alpha = 0
-            node.run(SKAction.fadeAlpha(to: 1, duration: rowAddDuration), withKey: fadeActionKey)
+            appearInWave(node, at: bubble.position)
         }
+    }
+
+    /// Spec 76: a bubble of a new row waits, hidden, for the empty row to
+    /// show and for its turn in the wave — by its row, the lowest new one
+    /// first, then by how far across it is — and then fades in as it drops
+    /// the last little way into its cell (spec 87). `node` is already at its
+    /// cell.
+    private func appearInWave(_ node: BubbleNode, at position: Vec2) {
+        let row = max(0, Int(((position.y - GameConsts.initialY) / GameConsts.rowHeight).rounded()))
+        let rowsBelow = max(0, rowsAddedThisFrame - 1 - row)
+        let span = GameConsts.rightBoardBorder - GameConsts.leftBoardBorder
+        let across = min(1, max(0, (position.x - GameConsts.leftBoardBorder) / span))
+        let delay = rowWaveLead + Double(rowsBelow) * rowWaveRowDelay + across * rowWaveDuration
+
+        let cell = node.position
+        node.alpha = 0
+        node.position = CGPoint(x: cell.x, y: cell.y + rowAppearDrop)
+        let drop = SKAction.move(to: cell, duration: rowAppearDuration)
+        drop.timingMode = .easeOut
+        let fade = SKAction.fadeIn(withDuration: rowAppearDuration)
+        fade.timingMode = .easeOut
+        node.run(
+            SKAction.sequence([SKAction.wait(forDuration: delay), SKAction.group([drop, fade])]),
+            withKey: rowAppearKey
+        )
+    }
+
+    /// Ends a new bubble's wave at once, fully shown, when something else
+    /// takes the bubble over before it is all there (spec 76). Every caller
+    /// then places the bubble itself or lets it fall from where it is — at
+    /// most `rowAppearDrop` above its cell.
+    private func finishRowAppear(_ node: SKNode) {
+        guard node.action(forKey: rowAppearKey) != nil else { return }
+        node.removeAction(forKey: rowAppearKey)
+        node.alpha = 1
     }
 
     // MARK: - Events
@@ -551,7 +664,8 @@ final class GameScene: SKScene {
                 onLivesChanged?(livesLeft, maxLives)
             case .turnResolved:
                 onTurnResolved?()
-            case .rowsAdded:
+            case let .rowsAdded(count):
+                rowsAddedThisFrame = count
                 // Spec 21 step 4: the engine has already fully recomputed
                 // every shifted bubble's position by the time this event
                 // drains (see context note), so this frame's `sync()` sees
@@ -674,6 +788,7 @@ final class GameScene: SKScene {
             }
             node.removeAction(forKey: moveActionKey)
             node.removeAction(forKey: fadeActionKey)
+            finishRowAppear(node)
             node.alpha = 1
             targets.removeValue(forKey: id)
 
@@ -722,6 +837,7 @@ final class GameScene: SKScene {
         targets.removeValue(forKey: id)
         node.removeAction(forKey: moveActionKey)
         node.removeAction(forKey: fadeActionKey)
+        finishRowAppear(node)
 
         let cleanup = SKAction.run { [weak self] in
             node.removeFromParent()
@@ -740,18 +856,22 @@ final class GameScene: SKScene {
             return
         }
 
-        let fallDuration: TimeInterval = 0.45
-        var fallActions = [
+        node.run(SKAction.sequence([fallAction(), cleanup]))
+    }
+
+    /// A bubble falling off the board: down and out over `fallDuration`.
+    /// Spec 45: it blurs into a cloud as it falls, like the dissolve of a
+    /// matched cluster — or falls sharp, if the pre-blurred frames are not
+    /// ready yet.
+    private func fallAction() -> SKAction {
+        var actions = [
             SKAction.moveBy(x: 0, y: -300, duration: fallDuration),
             SKAction.fadeOut(withDuration: fallDuration)
         ]
-        // Spec 45: a hanging bubble blurs into a cloud as it falls, like the
-        // dissolve of a matched cluster. Nil — it falls sharp — if the
-        // pre-blurred frames are not ready yet.
         if let blur = FallBlurFrames.blurAction(duration: fallDuration) {
-            fallActions.append(blur)
+            actions.append(blur)
         }
-        node.run(SKAction.sequence([SKAction.group(fallActions), cleanup]))
+        return SKAction.group(actions)
     }
 
     /// Spec 51: one bubble's pop — `flashDuration` of swelling to `flashScale`
@@ -840,9 +960,158 @@ final class GameScene: SKScene {
 
     /// Public entry point for Restart from the UI: resets the visual state
     /// the same way the `.boardReset` event does (the engine's board itself
-    /// must already have been reset by the caller before calling this).
+    /// must already have been reset by the caller before calling this). The
+    /// reset's own pending events are dropped: the scene is rebuilt here and
+    /// now, and a `.boardReset` drained later — after a pour (spec 69) — would
+    /// rebuild it a second time, cutting the cannon bubbles' appearance short.
     func rebuild() {
+        _ = engine.drainEvents()
         performBoardReset()
+    }
+
+    /// Restart, first half (spec 69): every bubble on screen falls off the
+    /// way a hanging bubble does in play — the bottom row first, then row
+    /// after row up to the top, each bubble at a small random delay within
+    /// its row; the cannon and queue bubbles, lowest of all, go first. The
+    /// engine freezes, so a bubble in flight stops where it is and falls with
+    /// its own row. `completion` runs once the last one is gone; the board
+    /// stays frozen for the reset and the pour that follow.
+    func collapseBoard(completion: @escaping () -> Void) {
+        freezeEngine()
+        haptics.prepareForBoardChange()
+        // Spec 70: a faint tick as each bubble lets go.
+        let letGo = SKAction.run { [weak self] in self?.haptics.boardBubbleLetGo() }
+        let bubbles = nodes.values.compactMap { $0 as? BubbleNode }
+        let rows = Self.rowsBottomUp(bubbles.map { ($0, $0.position.y) })
+        var end: TimeInterval = 0
+        for (index, row) in rows.enumerated() {
+            for node in row {
+                let delay = Double(index) * collapseRowStep + .random(in: 0...boardJitter)
+                node.removeAction(forKey: moveActionKey)
+                node.removeAction(forKey: fadeActionKey)
+                finishRowAppear(node)
+                node.run(SKAction.sequence([
+                    SKAction.wait(forDuration: delay), letGo, fallAction(), SKAction.removeFromParent()
+                ]), withKey: boardTransitionKey)
+                end = max(end, delay + fallDuration)
+            }
+        }
+        removeAction(forKey: boardTransitionKey)
+        run(SKAction.sequence([SKAction.wait(forDuration: end), SKAction.run(completion)]), withKey: boardTransitionKey)
+    }
+
+    /// A new board, the pour (spec 69): its bubbles drop in from above the
+    /// top of the screen, picking up speed, and squash a little as they land
+    /// in their cells — the bottom row first, then row after row up to the
+    /// top, each bubble at a small random delay within its row, so the rows
+    /// fill in from below. Once the board is in, the cannon and queue bubbles
+    /// slide up into place, the engine thaws and `completion` runs. The bubbles
+    /// are moved out of sight at once and start falling `delay` seconds
+    /// later, which lets the pour wait behind a fading overlay.
+    func pourIn(after delay: TimeInterval, completion: @escaping () -> Void) {
+        freezeEngine()
+        haptics.prepareForBoardChange()
+        let top = CGFloat(geometry.canvasHeight + topExtension) + CGFloat(GameConsts.bubbleSize)
+        var board: [(node: BubbleNode, target: CGPoint)] = []
+        var cannon: [(node: BubbleNode, alpha: CGFloat)] = []
+        for bubble in engine.bubbles {
+            guard let node = nodes[bubble.id] as? BubbleNode else { continue }
+            node.removeAction(forKey: boardTransitionKey)
+            node.removeAction(forKey: moveActionKey)
+            node.removeAction(forKey: fadeActionKey)
+            finishRowAppear(node)
+            let target = geometry.scenePoint(bubble.position)
+            if bubble.state == .onBoard {
+                node.alpha = 1
+                node.position = CGPoint(x: target.x, y: top)
+                board.append((node, target))
+            } else {
+                node.position = target
+                node.isHidden = true
+                cannon.append((node, bubble.state == .inQueue ? queueBubbleAlpha : 1))
+            }
+        }
+
+        let rows = Self.rowsBottomUp(board.map { ($0, $0.target.y) })
+        var landed = delay
+        for (index, row) in rows.enumerated() {
+            for entry in row {
+                let start = delay + Double(index) * pourRowStep + .random(in: 0...boardJitter)
+                let drop = drop(entry.node, from: top, to: entry.target)
+                entry.node.run(SKAction.sequence([SKAction.wait(forDuration: start), drop]), withKey: boardTransitionKey)
+                landed = max(landed, start + drop.duration)
+            }
+        }
+
+        removeAction(forKey: boardTransitionKey)
+        run(SKAction.sequence([
+            SKAction.wait(forDuration: landed),
+            SKAction.run { [weak self] in
+                guard let self else { return }
+                for entry in cannon {
+                    self.appear(entry.node, alpha: entry.alpha, after: entry.alpha < 1 ? self.pourAppearStagger : 0)
+                }
+                self.thawEngine()
+                completion()
+            }
+        ]), withKey: boardTransitionKey)
+    }
+
+    /// One poured bubble: a free fall from `top` straight down to `target`,
+    /// then a squash on landing, with a faint tick (spec 70).
+    private func drop(_ node: BubbleNode, from top: CGFloat, to target: CGPoint) -> SKAction {
+        let gravity = pourGravity
+        let duration = TimeInterval(((2 * max(0, top - target.y)) / gravity).squareRoot())
+        let fall = SKAction.customAction(withDuration: duration) { node, elapsed in
+            let t = CGFloat(elapsed)
+            node.position = CGPoint(x: target.x, y: max(target.y, top - gravity * t * t / 2))
+        }
+        let land = SKAction.run { [weak self, weak node] in
+            guard let self, let node else { return }
+            node.position = target
+            self.jelly.impulse(node, direction: CGVector(dx: 0, dy: -1), peak: self.pourLandingSquash)
+            self.haptics.boardBubbleSettled()
+        }
+        return SKAction.sequence([fall, land])
+    }
+
+    /// The cannon or queue bubble after a pour: slides up into its place
+    /// from `pourAppearOffset` below, fading in to `alpha`, its own opacity
+    /// (the queue bubble stays dimmed, spec 44), `delay` seconds from now.
+    /// The slide runs under `moveActionKey` and the fade under
+    /// `fadeActionKey`, so `sync()` starts neither a move nor a brightening of
+    /// its own on top, and a shot fired mid-slide takes the bubble over.
+    private func appear(_ node: BubbleNode, alpha: CGFloat, after delay: TimeInterval) {
+        let target = node.position
+        node.position = CGPoint(x: target.x, y: target.y - pourAppearOffset)
+        node.alpha = 0
+        node.isHidden = false
+        let slide = SKAction.move(to: target, duration: pourAppearDuration)
+        slide.timingMode = .easeOut
+        let fade = SKAction.fadeAlpha(to: alpha, duration: pourAppearDuration)
+        fade.timingMode = .easeOut
+        let wait = SKAction.wait(forDuration: delay)
+        node.run(SKAction.sequence([wait, slide]), withKey: moveActionKey)
+        node.run(SKAction.sequence([wait, fade]), withKey: fadeActionKey)
+    }
+
+    private func freezeEngine() {
+        isEngineFrozen = true
+        aimPoint = nil
+        trajectoryNode.isHidden = true
+    }
+
+    private func thawEngine() {
+        isEngineFrozen = false
+        accumulator = 0
+    }
+
+    /// Groups items into rows by height — exactly equal heights, rounded to
+    /// a logical unit, are one row (a board row; the cannon and the queue
+    /// are rows of their own) — ordered from the bottom of the scene up.
+    private static func rowsBottomUp<T>(_ items: [(T, CGFloat)]) -> [[T]] {
+        let grouped = Dictionary(grouping: items) { $0.1.rounded() }
+        return grouped.keys.sorted().map { key in grouped[key, default: []].map(\.0) }
     }
 
     /// Re-applies the current palette to every live bubble node — the
@@ -861,3 +1130,4 @@ final class GameScene: SKScene {
         }
     }
 }
+

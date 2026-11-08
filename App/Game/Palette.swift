@@ -12,19 +12,13 @@ import BubbleShooterCore
 /// `UIColor(hex:)`, while SwiftUI, which is color managed, gets the same
 /// numbers as P3 via `display(_:)`.
 enum Palette {
-    /// Original six bubble colors, indexed by `BubbleColor.rawValue` — the
-    /// starting palette, and what "reset colors" restores. Case names below
-    /// (e.g. `lightblue`) are legacy slot identifiers kept for save
-    /// compatibility via `rawValue`; the actual displayed color comes from
-    /// `PaletteStore`, seeded from this array.
-    static let defaultBubbleColors: [UInt32] = [
-        0x03C7FB, // blue
-        0xFF4D66, // red
-        0x87BD00, // green
-        0xFFB847, // yellow
-        0xB554FF, // purple
-        0x9D4E21  // lightblue
-    ]
+    /// The default set's six colors (`PaletteSet.default`), indexed by
+    /// `BubbleColor.rawValue` — the starting palette, and what "reset
+    /// colors" restores. `BubbleColor` case names (e.g. `lightblue`) are
+    /// legacy slot identifiers kept for save compatibility via `rawValue`;
+    /// the actual displayed color comes from `PaletteStore`, seeded from
+    /// this array.
+    static let defaultBubbleColors: [UInt32] = PaletteSet.default.colors
 
     /// Current color for a bubble slot. Reads live from `PaletteStore` so
     /// every call site (bubble nodes, the game-over background cycle) picks
@@ -33,10 +27,8 @@ enum Palette {
         PaletteStore.shared.color(for: bubbleColor)
     }
 
-    /// Background of the default (`chpok`) set.
-    static let defaultBackground: UInt32 = 0x000000
-    /// Current background; follows the selected palette set (spec 56) and
-    /// the theme (spec 57) — black in the dark one, white in the light one.
+    /// Current background: the grey picked on the background slider (spec
+    /// 64), black by default.
     static var background: UIColor { UIColor(hex: PaletteStore.shared.background) }
     /// `background` for SwiftUI, matching the scene — see `display(_:)`.
     static var displayBackground: UIColor { display(PaletteStore.shared.background) }

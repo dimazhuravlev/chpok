@@ -1,54 +1,26 @@
 import SwiftUI
 
-/// Header per the Figma layout: score on the left, a row of lives dots
-/// centered on the screen, Restart on the right. 32pt tall, 16pt below the
-/// top safe area, 16pt side insets (see `.fable/specs/20-figma-layout.md`).
+/// Header: the row of lives dots, centered (spec 71). 32pt tall, 16pt below
+/// the top safe area (see `.fable/specs/20-figma-layout.md`). No score (spec
+/// 68), nor on the game-over screen since spec 90. Restart, and `settings` for
+/// the palette sets, are up in place of the status bar (`IslandBarView`).
 struct HUDView: View {
-    let score: Int
     let livesLeft: Int
     let maxLives: Int
-    let onRestart: () -> Void
-    /// Hidden test gesture (spec 56): long press on the score.
-    var onScoreLongPress: () -> Void = {}
     /// Black on a light palette background, white on a dark one.
     var foreground: Color = .white
 
     var body: some View {
-        ZStack {
-            HStack {
-                Text(verbatim: String(score))
-                    .font(.appSemiBold(32))
-                    .monospacedDigit()
-                    .contentTransition(.numericText(value: Double(score)))
-                    .animation(.snappy, value: score)
-                    .foregroundStyle(foreground)
-                    .accessibilityIdentifier("scoreLabel")
-                    .onLongPressGesture(minimumDuration: 0.5, perform: onScoreLongPress)
-                Spacer()
-                Button("restart") {
-                    Haptics.shared.buttonTapped()
-                    onRestart()
-                }
-                .font(.appSemiBold(32))
-                .tint(foreground)
-                .foregroundStyle(foreground)
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("restartButton")
-            }
-            .padding(.horizontal, 16)
-
-            LivesIndicatorView(livesLeft: livesLeft, maxLives: maxLives, foreground: foreground)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 32)
-        .padding(.top, 16)
+        LivesIndicatorView(livesLeft: livesLeft, maxLives: maxLives, foreground: foreground)
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .padding(.top, 16)
     }
 }
 
-/// Row of `maxLives` 10pt dots, `spacing: 2` (58pt total for 5), full foreground
-/// color (white, or black on a light palette) for remaining lives and 20% opacity for lost ones. Centered on
-/// the screen (the parent `ZStack`'s default alignment), independent of the
-/// score/restart text widths on either side.
+/// Row of `maxLives` 10pt dots, `spacing: 2` (58pt total for 5), full
+/// foreground color (white, or black on a light palette) for remaining lives
+/// and 20% opacity for lost ones.
 private struct LivesIndicatorView: View {
     let livesLeft: Int
     let maxLives: Int
@@ -62,5 +34,9 @@ private struct LivesIndicatorView: View {
                     .frame(width: 10, height: 10)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("livesIndicator")
+        .accessibilityLabel(Text(verbatim: "lives"))
+        .accessibilityValue(Text(verbatim: "\(livesLeft) of \(maxLives)"))
     }
 }
